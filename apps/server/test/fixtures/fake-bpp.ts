@@ -66,11 +66,15 @@ export interface FakeBpp {
   received: Record<string, number>;
   /** Make the next confirm(s) for a store fail with this Beckn error code (until cleared). */
   confirmError: Map<string, string>;
+  /** Make select/init for a store fail with this Beckn error code even though its catalogue looked fine. */
+  quoteError: Map<string, string>;
   /** Swallow unsolicited on_cancel/on_status (to test the reconciler). */
   silent: boolean;
   setPrice(storeId: string, productId: string, pricePaise: number): void;
   setStock(storeId: string, productId: string, stock: number): void;
   setOnline(storeId: string, online: boolean): void;
+  /** Send the current state of an order again as a new unsolicited message (BPP retry / duplicate). */
+  resend(attId: string, action: "status" | "cancel"): Promise<void>;
   accept(attId: string): Promise<void>;
   reject(attId: string, reason?: string): Promise<void>;
   expire(attId: string): Promise<void>;
@@ -102,6 +106,7 @@ export async function startFakeBpp(ctx: AppContext): Promise<FakeBpp> {
   const orders = new Map<string, FakeOrder>();
   const received: Record<string, number> = {};
   const confirmError = new Map<string, string>();
+  const quoteError = new Map<string, string>();
 
   let baseUrl = "";
   const identity = () => ({ bppId: FAKE_BPP_ID, bppUri: baseUrl });
@@ -265,6 +270,11 @@ export async function startFakeBpp(ctx: AppContext): Promise<FakeBpp> {
       await send(onAction, cb, { order: echo }, { type: "DOMAIN-ERROR", code: "30001", message: "store is closed" });
       return;
     }
+    const forcedError = quoteError.get(s.id);
+    if (forcedError) {
+      await send(onAction, cb, { order: echo }, { type: "DOMAIN-ERROR", code: forcedError, message: forcedError === "40002" ? order.items.map((i) => i.id).join(",") : "forced error" });
+      return;
+    }
     const gps = order.fulfillments?.[0]?.end?.location.gps ?? "12.9719,77.6412";
     const dist = haversineM(parseGps(gps), s);
     if (dist > s.delivery_radius_m) {
@@ -335,7 +345,7 @@ export async function startFakeBpp(ctx: AppContext): Promise<FakeBpp> {
   baseUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
 
   const fake: FakeBpp = {
-    url: baseUrl, orders, received, confirmError, silent: false,
+    url: baseUrl, orders, received, confirmError, quoteError, silent: false,
     setPrice(storeId, productId, price) {
       const l = [...listings.values()].find((x) => x.storeId === storeId && x.productId === productId);
       if (!l) throw new Error("no such listing");
@@ -349,6 +359,9 @@ export async function startFakeBpp(ctx: AppContext): Promise<FakeBpp> {
     setOnline(storeId, online) {
       const s = storeOf(storeId);
       if (s) s.online = online;
+    },
+    async resend(attId, action) {
+      await emit(need(attId), action);
     },
     async accept(attId) {
       const fo = need(attId);
@@ -384,6 +397,7 @@ export async function startFakeBpp(ctx: AppContext): Promise<FakeBpp> {
       loadListings();
       orders.clear();
       confirmError.clear();
+      quoteError.clear();
       for (const k of Object.keys(received)) delete received[k];
       fake.silent = false;
     },

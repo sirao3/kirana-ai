@@ -70,3 +70,28 @@ export async function buildDemoBasket(h: BapHarness) {
     items: [{ listingId: L.atta, qty: 1 }, { listingId: L.toor, qty: 2 }, { listingId: L.tea, qty: 1 }, { listingId: L.milk, qty: 8 }],
   });
 }
+
+/** Quote, approve and pay the demo basket. Returns the basket id and the attempt-1 id per store. */
+export async function payDemoBasket(h: BapHarness, opts: { key?: string } = {}) {
+  await buildDemoBasket(h);
+  const q = await h.call("POST", "/bap/basket/quote");
+  const basketId = q.body.basket.id as string;
+  const a = await h.call("POST", `/bap/baskets/${basketId}/approve`, { quoteHash: q.body.quote.quoteHash });
+  if (a.status !== 200) throw new Error(`approve → ${a.status} ${JSON.stringify(a.body)}`);
+  const p = await h.call("POST", `/bap/baskets/${basketId}/pay`, { approvalToken: a.body.approvalToken }, { headers: { "idempotency-key": opts.key ?? `k-${basketId}` } });
+  if (p.body?.status !== "PAID") throw new Error(`pay → ${p.status} ${JSON.stringify(p.body)}`);
+  const view = (await h.call("GET", `/bap/baskets/${basketId}`)).body;
+  const att = (store: string): string => view.subOrders.find((s: any) => s.approvedStoreId === store).attempts[0].id;
+  return { basketId, sharma: att("store_sharma"), gupta: att("store_gupta"), lakshmi: att("store_lakshmi") };
+}
+
+/** Polls GET /bap/baskets/:id until `ok(view)`, up to timeoutMs. */
+export async function waitForOrder(h: BapHarness, basketId: string, ok: (v: any) => boolean, timeoutMs = 5000) {
+  const started = Date.now();
+  for (;;) {
+    const v = (await h.call("GET", `/bap/baskets/${basketId}`)).body;
+    if (ok(v)) return v;
+    if (Date.now() - started > timeoutMs) throw new Error(`timed out waiting; last view: ${JSON.stringify(v, null, 1)}`);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
