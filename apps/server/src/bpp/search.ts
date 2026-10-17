@@ -259,7 +259,12 @@ export async function searchCatalog(db: pg.Pool, input: SearchInput, now = new D
       id: store.id,
       descriptor: { name: store.name },
       locations: [{ id: `${store.id}_loc`, gps: gpsOf(store.lat, store.lng) }],
-      tags: [tag(KTAG.group, { distance_m: String(distance), delivery_charge: paiseToRupees(charge) })],
+      tags: [tag(KTAG.group, {
+        distance_m: String(distance),
+        delivery_charge: paiseToRupees(charge),
+        // Full rule as JSON so the BAP optimiser can price delivery at any subtotal (free_above).
+        [KTAG.deliveryRule]: JSON.stringify(store.delivery_rule),
+      })],
       items: items as unknown as CatalogItem[], // ONDC counts are strings on the wire; the schema output type is number
     });
   }
