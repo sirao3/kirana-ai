@@ -3,8 +3,9 @@ import { REQUEST_ACTIONS } from "@kiranaai/shared";
 import { registerBecknActions } from "../beckn/receiver.js";
 import { bppActionHandlers } from "./actions.js";
 import { merchantRoutes } from "./merchant/index.js";
+import { BPP_ID, bppIdentity } from "./identity.js";
 
-export const BPP_ID = "kiranaai-bpp";
+export { BPP_ID, bppIdentity };
 
 /** BPP module (/bpp): Beckn endpoints; merchant API (T05) and catalogue (T14) mount here too. */
 export const bppRoutes: FastifyPluginAsync = async (app) => {
@@ -12,8 +13,3 @@ export const bppRoutes: FastifyPluginAsync = async (app) => {
   await app.register(merchantRoutes, { prefix: "/merchant" });
   // Lane A: register the offer sweeper here with app.ctx.ticker.add({ name: "bpp.sweeper", everyMs: 1000, run }).
 };
-
-/** This BPP's identity for callback contexts. */
-export function bppIdentity(selfBaseUrl: string) {
-  return { bppId: BPP_ID, bppUri: `${selfBaseUrl.replace(/\/$/, "")}/bpp` };
-}
