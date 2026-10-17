@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean, doublePrecision, index, integer, jsonb, pgSchema, serial, text, timestamp, uniqueIndex,
+  boolean, doublePrecision, index, integer, jsonb, pgSchema, primaryKey, serial, text, timestamp, uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const bap = pgSchema("bap");
@@ -90,6 +90,31 @@ export const quoteStore = bap.table("quote_store", {
   totalPaise: integer("total_paise").notNull(),
 });
 
+/** Offers seen in on_search per customer (T06): lets basket routes resolve store/bpp/price from a listing id. */
+export const seenOffer = bap.table(
+  "seen_offer",
+  {
+    customerId: text("customer_id").notNull(),
+    listingId: text("listing_id").notNull(),
+    storeId: text("store_id").notNull(),
+    storeName: text("store_name").notNull(),
+    bppId: text("bpp_id").notNull(),
+    bppUri: text("bpp_uri").notNull(),
+    canonicalProductId: text("canonical_product_id").notNull(),
+    name: text("name").notNull(),
+    brand: text("brand").notNull().default(""),
+    packLabel: text("pack_label").notNull().default(""),
+    pricePaise: integer("price_paise").notNull(),
+    mrpPaise: integer("mrp_paise").notNull(),
+    stockQty: integer("stock_qty").notNull(),
+    distanceM: integer("distance_m").notNull(),
+    deliveryChargePaise: integer("delivery_charge_paise"),
+    deliveryRule: jsonb("delivery_rule"),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.customerId, t.listingId], name: "seen_offer_pk" })],
+);
+
 /** Single-use token minted only by the UI Approve button (AGT-07). */
 export const approval = bap.table("approval", {
   id: text("id").primaryKey(), // apv_
@@ -110,6 +135,8 @@ export const payment = bap.table(
     idempotencyKey: text("idempotency_key").notNull().unique(),
     amountPaise: integer("amount_paise").notNull(),
     status: text("status").$type<"INITIATED" | "PAID" | "FAILED">().notNull().default("INITIATED"),
+    /** Customer ticked "simulate failure" (T07); settles as FAILED. */
+    simulateFailure: boolean("simulate_failure").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
@@ -162,6 +189,8 @@ export const attempt = bap.table(
     quotedItemsPaise: integer("quoted_items_paise").notNull(),
     quotedDeliveryPaise: integer("quoted_delivery_paise").notNull(),
     quotedTotalPaise: integer("quoted_total_paise").notNull(),
+    /** The store's own quoted lines (its listing ids), used for confirm. */
+    lines: jsonb("lines").$type<QuoteLine[]>().notNull().default(sql`'[]'::jsonb`),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     rejectReason: text("reject_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
