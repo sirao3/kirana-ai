@@ -25,6 +25,8 @@ export const KTAG = {
   alternativeItemId: "alternative_item_id",
   /** confirm order tag: offer window chosen by the platform (bap.config); BPP sets expires_at from it. */
   offerWindowSeconds: "offer_window_seconds",
+  /** on_search provider tag (optional): the store's DeliveryRule as JSON, so the BAP optimiser can price delivery for any subtotal. */
+  deliveryRule: "delivery_rule",
 } as const;
 
 export interface ContextInput {
