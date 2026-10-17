@@ -10,7 +10,7 @@ export const TEST_DATABASE_URL =
 /** App on a random port so modules can make real HTTP calls to themselves. */
 export async function startTestApp(env: Record<string, string> = {}) {
   const dbHandle = createDb(TEST_DATABASE_URL);
-  await runMigrations(dbHandle.db);
+  await runMigrations(dbHandle.pool);
   const base = loadConfig({ ...process.env, DATABASE_URL: TEST_DATABASE_URL, PORT: "0", LOG_LEVEL: "warn", ...env });
   const app = await buildApp({ config: base, dbHandle, logger: false });
   await app.listen({ host: "127.0.0.1", port: 0 });

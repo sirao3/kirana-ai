@@ -1,0 +1,81 @@
+{
+  "_comment": "Demo seed (PRD §14). Money in paise. listings: store key -> [price_paise, stock_qty]. Prices are tuned so C1-C3 and the §9 worked example hold; seed.test.ts checks them. Stores are open all day and online so the hosted demo works at any hour.",
+  "customers": [
+    { "id": "cust_priya", "name": "Priya Nair", "phone": "+919845000001", "address": "12, 7th Cross, Indiranagar, Bengaluru 560038", "lat": 12.9719, "lng": 77.6412 },
+    { "id": "cust_rahul", "name": "Rahul Menon", "phone": "+919845000002", "address": "88, 5th Block, Koramangala, Bengaluru 560095", "lat": 12.9352, "lng": 77.6245 }
+  ],
+  "stores": [
+    { "key": "sharma", "id": "store_sharma", "name": "Sharma General Store", "address": "100 Feet Road, Indiranagar", "lat": 12.9791, "lng": 77.6412, "phone": "+919880000001", "delivery_radius_m": 3000, "delivery_rule": { "type": "flat", "charge_paise": 2000 } },
+    { "key": "gupta", "id": "store_gupta", "name": "Gupta Kirana", "address": "CMH Road, Indiranagar", "lat": 12.9719, "lng": 77.6514, "phone": "+919880000002", "delivery_radius_m": 3000, "delivery_rule": { "type": "free_above", "threshold_paise": 30000, "charge_paise": 3000 } },
+    { "key": "lakshmi", "id": "store_lakshmi", "name": "Lakshmi Stores", "address": "Old Airport Road, Domlur", "lat": 12.9593, "lng": 77.6412, "phone": "+919880000003", "delivery_radius_m": 2500, "delivery_rule": { "type": "distance_bands", "bands": [ { "max_m": 1000, "charge_paise": 1500 }, { "max_m": 2000, "charge_paise": 3000 }, { "max_m": 2500, "charge_paise": 4500 } ] } },
+    { "key": "balaji", "id": "store_balaji", "name": "Balaji Mart", "address": "Double Road, Shanthinagar", "lat": 12.9719, "lng": 77.6237, "phone": "+919880000004", "delivery_radius_m": 3500, "delivery_rule": { "type": "flat", "charge_paise": 2500 } },
+    { "key": "annapurna", "id": "store_annapurna", "name": "Annapurna Provisions", "address": "HAL 2nd Stage, Jeevan Bima Nagar", "lat": 12.9872, "lng": 77.6569, "phone": "+919880000005", "delivery_radius_m": 8000, "delivery_rule": { "type": "flat", "charge_paise": 1000 } }
+  ],
+  "products": [
+    { "id": "cp_atta_aashirvaad_10kg", "gtin": "8901725181130", "brand": "Aashirvaad", "name": "Whole Wheat Atta", "variant": "Shudh Chakki", "pack_size": 10, "unit": "kg", "category": "Atta & Flours", "mrp_paise": 49900, "keywords": "atta aata gehun ka aata wheat flour आटा", "listings": { "sharma": [45000, 40], "gupta": [49000, 30], "lakshmi": [47500, 25], "balaji": [46500, 30], "annapurna": [48000, 20] } },
+    { "id": "cp_atta_fortune_10kg", "gtin": "8906007280129", "brand": "Fortune", "name": "Chakki Fresh Atta", "variant": null, "pack_size": 10, "unit": "kg", "category": "Atta & Flours", "mrp_paise": 52000, "keywords": "atta aata gehun ka aata wheat flour आटा", "listings": { "sharma": [50500, 20], "gupta": [51000, 15], "balaji": [51500, 15] } },
+    { "id": "cp_toor_tata_1kg", "gtin": "8904043901015", "brand": "Tata Sampann", "name": "Unpolished Toor Dal", "variant": null, "pack_size": 1, "unit": "kg", "category": "Dals & Pulses", "mrp_paise": 18000, "keywords": "toor dal tur dal arhar dal tuvar तूर दाल अरहर", "listings": { "sharma": [16500, 40], "gupta": [15000, 40], "lakshmi": [16000, 30], "balaji": [15500, 40], "annapurna": [16200, 25] } },
+    { "id": "cp_toor_rajdhani_1kg", "gtin": "8901108100017", "brand": "Rajdhani", "name": "Toor Dal", "variant": null, "pack_size": 1, "unit": "kg", "category": "Dals & Pulses", "mrp_paise": 19900, "keywords": "toor dal tur dal arhar dal tuvar तूर दाल अरहर", "listings": { "sharma": [18500, 15], "lakshmi": [18900, 15], "annapurna": [19200, 10] } },
+    { "id": "cp_tea_tata_premium_250g", "gtin": "8901052002523", "brand": "Tata Tea", "name": "Premium Tea", "variant": null, "pack_size": 250, "unit": "g", "category": "Tea & Coffee", "mrp_paise": 9900, "keywords": "tea chai chai patti चाय", "listings": { "sharma": [9000, 30], "gupta": [8000, 30], "lakshmi": [8800, 25], "balaji": [8500, 30], "annapurna": [9000, 20] } },
+    { "id": "cp_tea_redlabel_250g", "gtin": "8901030704970", "brand": "Brooke Bond", "name": "Red Label Tea", "variant": null, "pack_size": 250, "unit": "g", "category": "Tea & Coffee", "mrp_paise": 12000, "keywords": "tea chai chai patti चाय", "listings": { "gupta": [11000, 20], "lakshmi": [11200, 20], "balaji": [11500, 20] } },
+    { "id": "cp_milk_amul_taaza_1l", "gtin": "8901262150125", "brand": "Amul", "name": "Taaza Toned Milk", "variant": "UHT Tetra Pack", "pack_size": 1, "unit": "l", "category": "Dairy", "mrp_paise": 7600, "keywords": "milk doodh दूध", "listings": { "sharma": [7200, 40], "gupta": [7200, 40], "lakshmi": [6500, 40], "balaji": [7000, 40], "annapurna": [6750, 40] } },
+    { "id": "cp_milk_nandini_fullcream_1l", "gtin": "8906004410017", "brand": "Nandini", "name": "Full Cream Milk", "variant": "UHT Tetra Pack", "pack_size": 1, "unit": "l", "category": "Dairy", "mrp_paise": 8000, "keywords": "milk doodh दूध", "listings": { "sharma": [7800, 20], "lakshmi": [7900, 20], "annapurna": [7800, 20] } },
+    { "id": "cp_jeera_everest_100g", "gtin": "8901786041027", "brand": "Everest", "name": "Jeera (Cumin Seeds)", "variant": null, "pack_size": 100, "unit": "g", "category": "Masalas & Spices", "mrp_paise": 8500, "keywords": "jeera cumin zeera जीरा", "listings": { "sharma": [7800, 25], "gupta": [8000, 25], "lakshmi": [7500, 25], "balaji": [8200, 25], "annapurna": [7900, 25] } },
+    { "id": "cp_rice_indiagate_basmati_5kg", "gtin": "8901571002412", "brand": "India Gate", "name": "Basmati Rice Classic", "variant": null, "pack_size": 5, "unit": "kg", "category": "Rice", "mrp_paise": 89900, "keywords": "rice basmati chawal चावल", "listings": { "sharma": [82000, 15], "gupta": [84500, 10], "balaji": [83000, 10], "annapurna": [85000, 10] } },
+    { "id": "cp_rice_sonamasoori_5kg", "gtin": null, "brand": "Daawat", "name": "Sona Masoori Rice", "variant": null, "pack_size": 5, "unit": "kg", "category": "Rice", "mrp_paise": 42000, "keywords": "rice sona masoori chawal चावल", "listings": { "sharma": [38000, 20], "lakshmi": [37000, 20], "balaji": [39000, 20], "annapurna": [37500, 20] } },
+    { "id": "cp_sugar_madhur_1kg", "gtin": "8906001050018", "brand": "Madhur", "name": "Pure Sugar", "variant": null, "pack_size": 1, "unit": "kg", "category": "Sugar & Salt", "mrp_paise": 6000, "keywords": "sugar cheeni chini चीनी", "listings": { "sharma": [5200, 40], "gupta": [5000, 40], "lakshmi": [5400, 40], "balaji": [5100, 40], "annapurna": [5300, 40] } },
+    { "id": "cp_salt_tata_1kg", "gtin": "8904043901480", "brand": "Tata", "name": "Iodised Salt", "variant": null, "pack_size": 1, "unit": "kg", "category": "Sugar & Salt", "mrp_paise": 2800, "keywords": "salt namak नमक", "listings": { "sharma": [2700, 50], "gupta": [2800, 50], "lakshmi": [2600, 50], "balaji": [2800, 50], "annapurna": [2700, 50] } },
+    { "id": "cp_oil_fortune_sunflower_1l", "gtin": "8906007280013", "brand": "Fortune", "name": "Sunlite Refined Sunflower Oil", "variant": "Pouch", "pack_size": 1, "unit": "l", "category": "Oils & Ghee", "mrp_paise": 18500, "keywords": "oil sunflower oil tel cooking oil तेल", "listings": { "sharma": [16500, 30], "gupta": [16000, 30], "lakshmi": [17000, 30], "balaji": [16200, 30] } },
+    { "id": "cp_ghee_amul_500ml", "gtin": "8901262010016", "brand": "Amul", "name": "Pure Ghee", "variant": "Carton", "pack_size": 500, "unit": "ml", "category": "Oils & Ghee", "mrp_paise": 34000, "keywords": "ghee desi ghee घी", "listings": { "sharma": [32000, 15], "lakshmi": [31500, 15], "annapurna": [32500, 15] } },
+    { "id": "cp_moong_tata_1kg", "gtin": "8904043901039", "brand": "Tata Sampann", "name": "Moong Dal", "variant": null, "pack_size": 1, "unit": "kg", "category": "Dals & Pulses", "mrp_paise": 21000, "keywords": "moong dal mung dal मूंग दाल", "listings": { "sharma": [19000, 25], "gupta": [18500, 25], "lakshmi": [18800, 25], "balaji": [18600, 25], "annapurna": [19200, 25] } },
+    { "id": "cp_chana_tata_1kg", "gtin": "8904043901022", "brand": "Tata Sampann", "name": "Chana Dal", "variant": null, "pack_size": 1, "unit": "kg", "category": "Dals & Pulses", "mrp_paise": 20000, "keywords": "chana dal bengal gram चना दाल", "listings": { "sharma": [17500, 25], "gupta": [17200, 25], "lakshmi": [17800, 25], "annapurna": [18000, 25] } },
+    { "id": "cp_turmeric_everest_100g", "gtin": "8901786011020", "brand": "Everest", "name": "Turmeric Powder", "variant": null, "pack_size": 100, "unit": "g", "category": "Masalas & Spices", "mrp_paise": 4500, "keywords": "turmeric haldi हल्दी", "listings": { "sharma": [4000, 30], "gupta": [4200, 30], "lakshmi": [3800, 30], "balaji": [4100, 30] } },
+    { "id": "cp_chilli_mdh_deggi_100g", "gtin": "8902167000126", "brand": "MDH", "name": "Deggi Mirch", "variant": null, "pack_size": 100, "unit": "g", "category": "Masalas & Spices", "mrp_paise": 9000, "keywords": "chilli powder lal mirch red chilli मिर्च", "listings": { "gupta": [8500, 20], "lakshmi": [8200, 20], "annapurna": [8400, 20] } },
+    { "id": "cp_coffee_bru_200g", "gtin": "8901030622120", "brand": "Bru", "name": "Instant Coffee", "variant": "Jar", "pack_size": 200, "unit": "g", "category": "Tea & Coffee", "mrp_paise": 36000, "keywords": "coffee instant coffee कॉफी", "listings": { "sharma": [33000, 15], "gupta": [32500, 15], "balaji": [33500, 15] } },
+    { "id": "cp_biscuits_parleg_800g", "gtin": "8901719110016", "brand": "Parle", "name": "Parle-G Gluco Biscuits", "variant": "Family Pack", "pack_size": 800, "unit": "g", "category": "Biscuits & Snacks", "mrp_paise": 10000, "keywords": "biscuits biscuit parle g", "listings": { "sharma": [9000, 30], "gupta": [8800, 30], "lakshmi": [9200, 30], "balaji": [8900, 30], "annapurna": [9100, 30] } },
+    { "id": "cp_noodles_maggi_12pk", "gtin": "8901058851298", "brand": "Maggi", "name": "2-Minute Masala Noodles", "variant": "12-pack", "pack_size": 12, "unit": "pcs", "category": "Biscuits & Snacks", "mrp_paise": 16800, "keywords": "noodles maggi instant noodles", "listings": { "sharma": [16000, 20], "gupta": [15500, 20], "lakshmi": [15800, 20], "balaji": [15600, 20] } },
+    { "id": "cp_soap_lifebuoy_4pk", "gtin": "8901030865237", "brand": "Lifebuoy", "name": "Total 10 Soap Bar", "variant": "4 x 100 g", "pack_size": 4, "unit": "pcs", "category": "Personal Care", "mrp_paise": 16000, "keywords": "soap bath soap sabun साबुन", "listings": { "sharma": [14500, 20], "balaji": [14000, 20], "annapurna": [14800, 20] } },
+    { "id": "cp_detergent_surf_1kg", "gtin": "8901030788154", "brand": "Surf Excel", "name": "Easy Wash Detergent Powder", "variant": null, "pack_size": 1, "unit": "kg", "category": "Household", "mrp_paise": 14500, "keywords": "detergent washing powder surf", "listings": { "sharma": [13500, 20], "gupta": [13000, 20], "lakshmi": [13800, 20], "annapurna": [13200, 20] } },
+    { "id": "cp_toothpaste_colgate_200g", "gtin": "8901314010315", "brand": "Colgate", "name": "Strong Teeth Toothpaste", "variant": null, "pack_size": 200, "unit": "g", "category": "Personal Care", "mrp_paise": 12000, "keywords": "toothpaste colgate", "listings": { "sharma": [11000, 25], "gupta": [10500, 25], "balaji": [10800, 25], "annapurna": [11200, 25] } },
+    { "id": "cp_butter_amul_500g", "gtin": "8901262011037", "brand": "Amul", "name": "Pasteurised Butter", "variant": null, "pack_size": 500, "unit": "g", "category": "Dairy", "mrp_paise": 28500, "keywords": "butter makhan मक्खन", "listings": { "sharma": [27500, 15], "lakshmi": [27000, 15], "balaji": [27200, 15] } },
+    { "id": "cp_paneer_amul_200g", "gtin": "8901262260121", "brand": "Amul", "name": "Fresh Paneer", "variant": null, "pack_size": 200, "unit": "g", "category": "Dairy", "mrp_paise": 9500, "keywords": "paneer cottage cheese पनीर", "listings": { "sharma": [9000, 15], "lakshmi": [8800, 15], "annapurna": [9200, 15] } },
+    { "id": "cp_curd_nandini_500g", "gtin": null, "brand": "Nandini", "name": "Curd", "variant": "Cup", "pack_size": 500, "unit": "g", "category": "Dairy", "mrp_paise": 3500, "keywords": "curd dahi yogurt दही", "listings": { "sharma": [3200, 20], "gupta": [3300, 20], "lakshmi": [3000, 20], "annapurna": [3100, 20] } },
+    { "id": "cp_poha_tata_500g", "gtin": "8904043901602", "brand": "Tata Sampann", "name": "Thick Poha", "variant": null, "pack_size": 500, "unit": "g", "category": "Breakfast", "mrp_paise": 6000, "keywords": "poha flattened rice aval पोहा", "listings": { "sharma": [5500, 20], "gupta": [5200, 20], "balaji": [5400, 20] } },
+    { "id": "cp_besan_rajdhani_500g", "gtin": "8901108101021", "brand": "Rajdhani", "name": "Besan", "variant": null, "pack_size": 500, "unit": "g", "category": "Atta & Flours", "mrp_paise": 7500, "keywords": "besan gram flour बेसन", "listings": { "gupta": [6800, 20], "lakshmi": [7000, 20], "annapurna": [7200, 20] } },
+    { "id": "cp_bread_modern_400g", "gtin": "8901725121624", "brand": "Modern", "name": "White Bread", "variant": "Sliced", "pack_size": 400, "unit": "g", "category": "Bakery", "mrp_paise": 5000, "keywords": "bread pav double roti ब्रेड", "listings": { "sharma": [4500, 15], "gupta": [4500, 15], "lakshmi": [4600, 15], "balaji": [4400, 15] } },
+    { "id": "cp_eggs_farmfresh_12", "gtin": null, "brand": "Farm Fresh", "name": "White Eggs", "variant": "Tray", "pack_size": 12, "unit": "pcs", "category": "Eggs", "mrp_paise": 9600, "keywords": "eggs anda अंडा", "listings": { "sharma": [9000, 20], "lakshmi": [8800, 20], "balaji": [8600, 20] } }
+  ],
+  "synonyms": {
+    "aata": "atta", "gehun": "atta", "gehun ka aata": "atta", "gehu atta": "atta", "wheat flour": "atta", "आटा": "atta", "गेहूं का आटा": "atta",
+    "tur": "toor", "tur dal": "toor dal", "arhar": "toor", "arhar dal": "toor dal", "tuvar": "toor", "tuvar dal": "toor dal", "तूर दाल": "toor dal", "अरहर": "toor", "अरहर दाल": "toor dal",
+    "chai patti": "tea", "chai": "tea", "chaipatti": "tea", "चाय": "tea", "चायपत्ती": "tea",
+    "doodh": "milk", "dudh": "milk", "दूध": "milk",
+    "zeera": "jeera", "cumin": "jeera", "जीरा": "jeera",
+    "chawal": "rice", "चावल": "rice",
+    "cheeni": "sugar", "chini": "sugar", "चीनी": "sugar",
+    "namak": "salt", "नमक": "salt",
+    "haldi": "turmeric", "हल्दी": "turmeric",
+    "lal mirch": "chilli", "mirchi": "chilli",
+    "dahi": "curd", "दही": "curd",
+    "makhan": "butter", "tel": "oil", "anda": "eggs", "ande": "eggs", "pav": "bread", "sabun": "soap"
+  },
+  "loose_terms": {
+    "loose": "We only sell sealed packs. Try the nearest pack size instead.",
+    "khula": "Khula (loose) items aren't sold here; choose a sealed pack instead.",
+    "khulla": "Khula (loose) items aren't sold here; choose a sealed pack instead.",
+    "tola": "We only sell sealed packs; weights must match a pack size.",
+    "by weight": "We only sell sealed packs; weights must match a pack size."
+  },
+  "demo": {
+    "_comment": "Needs for the PRD §14 demo prompt; C1 must pick exactly sharma, gupta, lakshmi at 140000 paise. Category = canonical id prefix.",
+    "customer_id": "cust_priya",
+    "needs": [
+      { "query": "atta", "category_prefix": "cp_atta_", "qty": 1 },
+      { "query": "toor dal", "category_prefix": "cp_toor_", "qty": 2 },
+      { "query": "tea", "category_prefix": "cp_tea_", "qty": 1 },
+      { "query": "milk", "category_prefix": "cp_milk_", "qty": 8 }
+    ],
+    "expected_stores": ["store_sharma", "store_gupta", "store_lakshmi"],
+    "expected_total_paise": 140000
+  }
+}

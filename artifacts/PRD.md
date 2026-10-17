@@ -408,7 +408,7 @@ Store delivers. Rules: `flat`, `distance_bands`, `free_above`. Serviceability ch
 
 **In code:** no pay/confirm tool exists; `POST /bap/baskets/:id/pay` requires a single-use token from `POST /bap/baskets/:id/approve`, which only the UI button calls. Totals on screen always come from API data, not the agent's text. Max 8 tool calls per turn; 20 s timeout → AGT-12 fallback.
 
-**Optimiser:** exact search over store subsets (5 stores → 31 subsets). Cost = Σ cheapest item price in the subset + Σ delivery charges of stores used. Cheapest wins; ties go to fewer stores. Reasons are generated from the numbers ("₹12 cheaper than Gupta", "adding Lakshmi saves ₹38 even after ₹30 delivery").
+**Optimiser:** exact search over store subsets (5 stores → 31 subsets). Cost = Σ cheapest item price in the subset + Σ delivery charges of stores used. Cheapest wins; ties go to fewer stores, then to the smaller total store distance (needed because the §9 worked example makes Sharma+Gupta+Annapurna cost the same ₹1,400 as Sharma+Gupta+Lakshmi; Lakshmi is nearer). A need's candidates are the offers of its matching canonical products; the cheapest offer per need within the subset is used. Seed stores start **online** so the hosted URL works cold; "All stores online" on the wall mainly unlocks audio. Reasons are generated from the numbers ("₹12 cheaper than Gupta", "adding Lakshmi saves ₹38 even after ₹30 delivery").
 
 ---
 

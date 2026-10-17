@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "seed": "tsx --env-file-if-exists=../../.env src/db/seed-cli.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:draft": "drizzle-kit generate"
   },
   "dependencies": {
     "@fastify/static": "^8",
