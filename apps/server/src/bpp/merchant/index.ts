@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { auditState } from "../../beckn/audit.js";
+import { catalogueRoutes } from "./catalogue.js";
 import { canActForStore, requireAuth } from "../../lib/auth.js";
 import {
   acceptOffer, advanceOrder, ATTEMPT_COLS, notifyBap, rejectOffer, StockError, type AttemptItemRow, type AttemptRow,
@@ -52,6 +53,7 @@ export const merchantRoutes: FastifyPluginAsync = async (app) => {
     const storeId = (req.params as { storeId?: string }).storeId;
     if (storeId && !canActForStore(req.auth, storeId)) return reply.code(403).send({ error: "forbidden" });
   });
+  await app.register(catalogueRoutes);
 
   app.get<{ Params: { storeId: string } }>("/:storeId/dashboard", async (req, reply) => {
     const { storeId } = req.params;
