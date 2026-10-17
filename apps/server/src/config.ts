@@ -11,6 +11,8 @@ const Env = z.object({
   DB_USER: z.string().default("kiranaai"),
   DB_PASSWORD: z.string().default(""),
   ADMIN_PASSCODE: z.string().default("demo"),
+  /** Signs persona tokens; defaults to a hash of ADMIN_PASSCODE. */
+  AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
   OFFER_WINDOW_SECONDS: z.coerce.number().int().positive().default(45),

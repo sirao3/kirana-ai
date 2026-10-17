@@ -6,6 +6,13 @@ import fastifyStatic from "@fastify/static";
 import type { Config } from "./config.js";
 import { pingDb, type DbHandle } from "./db/client.js";
 import { Ticker } from "./lib/ticker.js";
+import { Waiters } from "./beckn/waiters.js";
+import { gatewayRoutes } from "./gateway/index.js";
+import { bppRoutes } from "./bpp/index.js";
+import { bapRoutes } from "./bap/index.js";
+import { adminRoutes } from "./admin/index.js";
+import { authRoutes } from "./auth/index.js";
+import { testingRoutes } from "./testing/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,6 +22,8 @@ export interface AppContext {
   db: DbHandle["db"];
   pool: DbHandle["pool"];
   ticker: Ticker;
+  /** Beckn callback waiters (in memory; one instance only). */
+  waiters: Waiters;
 }
 
 declare module "fastify" {
@@ -24,7 +33,7 @@ declare module "fastify" {
 }
 
 /** Route prefixes owned by the API; everything else may fall back to the SPA. */
-export const API_PREFIXES = ["/bap", "/bpp", "/gw", "/admin", "/health", "/test"];
+export const API_PREFIXES = ["/bap", "/bpp", "/gw", "/admin", "/auth", "/health", "/test"];
 
 // Cloud Logging reads `severity`; keep pino JSON otherwise.
 const SEVERITY: Record<string, string> = {
@@ -45,7 +54,7 @@ export async function buildApp(opts: { config: Config; dbHandle: DbHandle; logge
   });
 
   const ticker = new Ticker((job, err) => app.log.error({ err, job }, "tick job failed"));
-  app.decorate("ctx", { config, db: dbHandle.db, pool: dbHandle.pool, ticker });
+  app.decorate("ctx", { config, db: dbHandle.db, pool: dbHandle.pool, ticker, waiters: new Waiters() });
 
   // See lib/ticker.ts: requests are what give us CPU on Cloud Run. Fire and forget —
   // awaiting here would deadlock jobs that call this server over HTTP.
@@ -58,8 +67,13 @@ export async function buildApp(opts: { config: Config; dbHandle: DbHandle; logge
     return reply.code(ok ? 200 : 503).send({ status: ok ? "ok" : "degraded", db: ok ? "ok" : "error" });
   });
 
-  // Modules register here (each as a Fastify plugin under its own prefix).
-  // e.g. await app.register(gatewayRoutes, { prefix: "/gw" });
+  // Modules: each owns its prefix (and its own DB schema, PRD §4).
+  await app.register(gatewayRoutes, { prefix: "/gw" });
+  await app.register(bppRoutes, { prefix: "/bpp" });
+  await app.register(bapRoutes, { prefix: "/bap" });
+  await app.register(adminRoutes, { prefix: "/admin" });
+  await app.register(authRoutes, { prefix: "/auth" });
+  await app.register(testingRoutes, { prefix: "/test" });
 
   const webDist = config.WEB_DIST ?? path.resolve(here, "../../web/dist");
   const hasWeb = existsSync(path.join(webDist, "index.html"));

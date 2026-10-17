@@ -1,0 +1,3 @@
+ONDC Retail API contract, domain ONDC:RET10 (grocery), context.core_version 1.2.0
+Source: github.com/ONDC-Official/ONDC-RET-Specifications, release 1.2.0 (shapes only, for the fields KiranaAI uses).
+ONDC-aligned, not ONDC-compliant: see docs/ONDC_DEVIATIONS.md.

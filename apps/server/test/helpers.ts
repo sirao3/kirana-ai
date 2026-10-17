@@ -11,7 +11,7 @@ export const TEST_DATABASE_URL =
 export async function startTestApp(env: Record<string, string> = {}) {
   const dbHandle = createDb(TEST_DATABASE_URL);
   await runMigrations(dbHandle.pool);
-  const base = loadConfig({ ...process.env, DATABASE_URL: TEST_DATABASE_URL, PORT: "0", LOG_LEVEL: "warn", ...env });
+  const base = loadConfig({ ...process.env, DATABASE_URL: TEST_DATABASE_URL, PORT: "0", LOG_LEVEL: "warn", ADMIN_PASSCODE: "demo", AUTH_SECRET: "test-secret", ...env });
   const app = await buildApp({ config: base, dbHandle, logger: false });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const addr = app.server.address();
@@ -30,4 +30,18 @@ export async function startTestApp(env: Record<string, string> = {}) {
       await dbHandle.close();
     },
   };
+}
+
+/** Persona token via the real /auth/persona route. Admin passcode in tests is "demo". */
+export async function tokenFor(
+  url: string,
+  body: { role: "customer" | "merchant"; id: string } | { role: "admin"; passcode: string },
+): Promise<string> {
+  const res = await fetch(`${url}/auth/persona`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`persona ${JSON.stringify(body)} → ${res.status}`);
+  return ((await res.json()) as { token: string }).token;
 }
