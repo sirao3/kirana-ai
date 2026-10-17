@@ -6,6 +6,7 @@ Agentic commerce for kirana stores on Beckn/ONDC. 24–48 h hackathon, hosted on
 - `artifacts/PRD.md` — requirements v2.1 (architecture, state machines, dispatch rules, demo script, decisions).
 - `artifacts/TASKS.md` — sequential tasks T01–T18 with "Done when" checks, a 24 h cut list, and 3 parallel lanes (A seller / B buyer / C agent+UI) after T03.
 - `artifacts/LANES.md` — lane ownership, rules and the BPP⇄BAP / merchant / admin contracts. BAP HTTP API types: `packages/shared/src/api.ts`.
+- `artifacts/RUNBOOK.md` — how to test (browser, tests, e2e), run locally, deploy, and rotate the Gemini key.
 - `docs/ONDC_DEVIATIONS.md` — every Beckn/ONDC deviation and kiranaai tag; update it when you add one.
 Read them before starting a task. If code and PRD disagree, raise it; don't silently diverge.
 
