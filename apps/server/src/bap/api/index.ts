@@ -4,6 +4,7 @@ import { requireAuth } from "../../lib/auth.js";
 import { ApiError } from "../util.js";
 import { discoveryRoutes } from "./discovery.js";
 import { basketRoutes } from "./basket.js";
+import { checkoutRoutes } from "./checkout.js";
 
 /** Customer BAP API (/bap/*), lane B: search, basket, quote (T06), approve/pay (T07), orders (T08), plan (T09). Contract: packages/shared/src/api.ts */
 export const bapApiRoutes: FastifyPluginAsync = async (app) => {
@@ -21,4 +22,5 @@ export const bapApiRoutes: FastifyPluginAsync = async (app) => {
 
   await app.register(discoveryRoutes);
   await app.register(basketRoutes);
+  await app.register(checkoutRoutes);
 };
