@@ -73,11 +73,12 @@ describe("Beckn layer + gateway (T03)", () => {
     expect(((await r2.json()) as { message: { ack: { status: string } } }).message.ack.status).toBe("NACK");
   });
 
-  it("NACKs actions a module has not implemented yet", async () => {
-    const ctx = makeContext({ action: "status", transactionId: "txn_x", bapId: "kiranaai-bap", bapUri: `${t.url}/bap`, bppId: "kiranaai-bpp", bppUri: `${t.url}/bpp` });
-    const res = await post("/bpp/status", { context: ctx, message: { order_id: "att_x" } });
+  it("NACKs actions a module does not support (BPP cancel → 30000)", async () => {
+    const ctx = makeContext({ action: "cancel", transactionId: "txn_x", bapId: "kiranaai-bap", bapUri: `${t.url}/bap`, bppId: "kiranaai-bpp", bppUri: `${t.url}/bpp` });
+    const res = await post("/bpp/cancel", { context: ctx, message: { order_id: "att_x", cancellation_reason_id: "001" } });
     const body = (await res.json()) as { message: { ack: { status: string } }; error: { code: string } };
     expect(body.message.ack.status).toBe("NACK");
+    expect(body.error.code).toBe("30000");
   });
 
   it("waitFor times out", async () => {

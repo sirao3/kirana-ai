@@ -25,7 +25,8 @@ export interface QuotedItem {
   qty: number;
   unitPricePaise: number;
   lineTotalPaise: number;
-  stock: number;
+  /** Current stock; omitted when replaying a stored order. */
+  stock?: number;
   previousPricePaise?: number;
 }
 
@@ -115,7 +116,7 @@ export async function quoteStore(
 }
 
 /** Contract quote: one `item` row per item and one `delivery` row (`@ondc/org/item_id: "f1"`). */
-export function toBecknQuote(q: StoreQuote, ttl?: string): Quote {
+export function toBecknQuote(q: Pick<StoreQuote, "items" | "deliveryPaise" | "totalPaise">, ttl?: string): Quote {
   const fulfilmentId = "f1";
   return {
     price: priceOf(q.totalPaise),
@@ -128,7 +129,7 @@ export function toBecknQuote(q: StoreQuote, ttl?: string): Quote {
         price: priceOf(i.lineTotalPaise),
         item: {
           price: priceOf(i.unitPricePaise),
-          quantity: { available: { count: String(i.stock) } },
+          ...(i.stock !== undefined ? { quantity: { available: { count: String(i.stock) } } } : {}),
           ...(i.previousPricePaise !== undefined
             ? { tags: [tag(KTAG.group, { price_changed: "true", previous_price: paiseToRupees(i.previousPricePaise) })] }
             : {}),
