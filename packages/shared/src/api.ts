@@ -248,6 +248,12 @@ export interface AgentReply {
   steps: { tool: string; ok: boolean }[];
 }
 
+// Agent transcript for page reloads (lane C): GET /bap/agent/history → { messages }; POST /bap/agent/reset clears it.
+export interface AgentHistoryMessage {
+  role: "user" | "model";
+  text: string;
+}
+
 // ---------- Small helpers ----------
 
 export function packLabel(packSize: number, unit: string): string {
