@@ -1,0 +1,9 @@
+# Uploaded by `gcloud run deploy --source .`; never ship secrets.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+**/node_modules
+**/dist
+artifacts
