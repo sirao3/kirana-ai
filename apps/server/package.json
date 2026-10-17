@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@fastify/static": "^8",
+    "@google/genai": "^2.30.0",
     "@kiranaai/shared": "workspace:^",
     "drizzle-orm": "^0.44",
     "fastify": "^5",

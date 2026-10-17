@@ -15,6 +15,7 @@ const Env = z.object({
   AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
+  AGENT_DAILY_CAP: z.coerce.number().int().positive().default(500),
   OFFER_WINDOW_SECONDS: z.coerce.number().int().positive().default(45),
   WEB_DIST: z.string().optional(),
   LOG_LEVEL: z.string().default("info"),
