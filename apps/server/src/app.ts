@@ -33,7 +33,7 @@ declare module "fastify" {
 }
 
 /** Route prefixes owned by the API; everything else may fall back to the SPA. */
-export const API_PREFIXES = ["/bap", "/bpp", "/gw", "/admin", "/auth", "/health", "/test"];
+export const API_PREFIXES = ["/bap", "/bpp", "/gw", "/admin/api", "/auth", "/health", "/test"];
 
 // Cloud Logging reads `severity`; keep pino JSON otherwise.
 const SEVERITY: Record<string, string> = {
@@ -71,7 +71,7 @@ export async function buildApp(opts: { config: Config; dbHandle: DbHandle; logge
   await app.register(gatewayRoutes, { prefix: "/gw" });
   await app.register(bppRoutes, { prefix: "/bpp" });
   await app.register(bapRoutes, { prefix: "/bap" });
-  await app.register(adminRoutes, { prefix: "/admin" });
+  await app.register(adminRoutes, { prefix: "/admin/api" });
   await app.register(authRoutes, { prefix: "/auth" });
   await app.register(testingRoutes, { prefix: "/test" });
 

@@ -13,6 +13,7 @@ export const CORE_VERSION = "1.2.0";
  *   customer_id = BAP customer (lets the BPP compute distance/serviceability).
  * - catalog item: loose_declined = "true" with reason/alternative_item_id when a loose request was declined;
  *   canonical_id = canonical product id of the listing.
+ * - confirm order: offer_window_seconds (platform config lives in the BAP; the BPP owns the timer).
  */
 export const KTAG = {
   group: "kiranaai",
@@ -22,6 +23,8 @@ export const KTAG = {
   looseDeclined: "loose_declined",
   reason: "reason",
   alternativeItemId: "alternative_item_id",
+  /** confirm order tag: offer window chosen by the platform (bap.config); BPP sets expires_at from it. */
+  offerWindowSeconds: "offer_window_seconds",
 } as const;
 
 export interface ContextInput {

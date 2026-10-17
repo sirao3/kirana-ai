@@ -8,6 +8,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    proxy: Object.fromEntries(["/bap", "/bpp", "/gw", "/admin", "/health"].map((p) => [p, api])),
+    proxy: Object.fromEntries(["/bap", "/bpp", "/gw", "/admin/api", "/auth", "/health", "/test"].map((p) => [p, api])),
   },
 });

@@ -1,0 +1,255 @@
+/**
+ * BAP HTTP API contract (/bap/*). Lane B implements it; the web app (lane C) and the agent's
+ * tools (lane C, loopback HTTP) consume it. Change it only with the other lanes in mind.
+ *
+ * Auth: `Authorization: Bearer <customer token>` (POST /auth/persona) on every route below
+ * except /bap/admin/* (admin token). Money is integer paise; quantities are integer packs.
+ * Errors: non-2xx with { error: string, message?: string, details?: unknown }.
+ */
+
+export type BasketStatus =
+  | "DRAFT" | "QUOTED" | "EXPIRED" | "APPROVED" | "PAYMENT_INITIATED" | "PAID" | "PAYMENT_FAILED"
+  | "PARTIALLY_REFUNDED" | "REFUNDED" | "SETTLED";
+export type SubOrderStatus =
+  | "DISPATCHING" | "ACCEPTED" | "PREPARING" | "READY" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED_NO_FULFILMENT";
+export type AttemptStatus = "PENDING" | "OFFERED" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+export type PaymentStatus = "NONE" | "INITIATED" | "PAID" | "FAILED";
+
+// ---------- Discovery: GET /bap/search?q=<text> ----------
+
+export interface SearchOffer {
+  listingId: string;
+  storeId: string;
+  storeName: string;
+  bppId: string;
+  bppUri: string;
+  canonicalProductId: string;
+  name: string;
+  brand: string;
+  /** e.g. "10 kg" */
+  packLabel: string;
+  pricePaise: number;
+  mrpPaise: number;
+  stockQty: number;
+  distanceM: number;
+  /** This store's delivery charge for this customer for a basket of just this item; null if unknown. */
+  deliveryChargePaise: number | null;
+  /** Search data is catalogue stock; quotes are "verified". */
+  badge: "catalogue";
+}
+
+export interface SearchGroup {
+  canonicalProductId: string;
+  name: string;
+  brand: string;
+  packLabel: string;
+  /** Cheapest first. */
+  offers: SearchOffer[];
+}
+
+export interface LooseDeclined {
+  query: string;
+  reason: string;
+  alternative: { canonicalProductId: string; name: string; packLabel: string; listingId?: string } | null;
+}
+
+export interface SearchResponse {
+  query: string;
+  groups: SearchGroup[];
+  looseDeclined: LooseDeclined[];
+  tookMs: number;
+}
+
+// ---------- Basket ----------
+// GET    /bap/basket                       → BasketView (customer's open basket; creates a DRAFT if none)
+// PUT    /bap/basket       {items:[{listingId, qty}]}  → BasketView (replace all; agent set_basket)
+// PUT    /bap/basket/items {listingId, qty}            → BasketView (add or set qty)
+// PATCH  /bap/basket/items/:listingId {qty}           → BasketView
+// DELETE /bap/basket/items/:listingId                 → BasketView
+// listingId must be one the BAP has seen in an on_search (it resolves store/price from that).
+// Any edit of a QUOTED/EXPIRED basket moves it back to DRAFT.
+
+export interface BasketItemView {
+  listingId: string;
+  storeId: string;
+  storeName: string;
+  canonicalProductId: string;
+  name: string;
+  qty: number;
+  seenPricePaise: number;
+  lineTotalPaise: number;
+}
+
+export interface BasketStoreGroup {
+  storeId: string;
+  storeName: string;
+  items: BasketItemView[];
+  itemsTotalPaise: number;
+}
+
+export interface BasketView {
+  id: string;
+  status: BasketStatus;
+  transactionId: string;
+  stores: BasketStoreGroup[];
+  itemCount: number;
+  /** Latest quote, if any (check `expired`). */
+  quote: QuoteView | null;
+}
+
+// ---------- Quote: POST /bap/basket/quote → QuoteResponse ----------
+
+export interface QuoteLineView {
+  listingId: string;
+  canonicalProductId: string;
+  name: string;
+  qty: number;
+  unitPricePaise: number;
+  seenPricePaise: number;
+  priceChanged: boolean;
+  available: boolean;
+  lineTotalPaise: number;
+}
+
+export interface QuoteStoreView {
+  storeId: string;
+  storeName: string;
+  lines: QuoteLineView[];
+  itemsTotalPaise: number;
+  deliveryPaise: number;
+  totalPaise: number;
+}
+
+export interface QuoteView {
+  id: string;
+  quoteHash: string;
+  /** ISO time; quotes are valid 10 min. */
+  validUntil: string;
+  expired: boolean;
+  itemsTotalPaise: number;
+  deliveryTotalPaise: number;
+  platformFeePaise: number;
+  grandTotalPaise: number;
+  stores: QuoteStoreView[];
+}
+
+export interface StoreQuoteError {
+  storeId: string;
+  storeName: string;
+  code: "OUT_OF_STOCK" | "NOT_SERVICEABLE" | "STORE_OFFLINE" | "TIMEOUT" | "ERROR";
+  message: string;
+  listingIds?: string[];
+}
+
+export interface QuoteResponse {
+  basket: BasketView;
+  /** null when any store failed; fix the basket using `errors` and re-quote. */
+  quote: QuoteView | null;
+  errors: StoreQuoteError[];
+}
+
+// ---------- Approve + pay (UI only; the agent has no route to these) ----------
+// POST /bap/baskets/:id/approve {quoteHash}                  → ApproveResponse   (403/409 if quote changed/expired)
+// POST /bap/baskets/:id/pay {approvalToken, simulateFailure?} + header Idempotency-Key → PayResponse
+//   403 without a valid unused approval token. Same Idempotency-Key → same payment.
+
+export interface ApproveResponse {
+  approvalToken: string;
+  expiresAt: string;
+}
+
+export interface PayResponse {
+  paymentId: string;
+  status: Exclude<PaymentStatus, "NONE">;
+}
+
+// ---------- Orders: GET /bap/baskets/:id → OrderView, GET /bap/orders → OrderView[] (newest first, paid baskets) ----------
+
+export interface AttemptView {
+  id: string;
+  attemptNo: number;
+  storeId: string;
+  storeName: string;
+  status: AttemptStatus;
+  /** ISO; set while OFFERED. */
+  expiresAt: string | null;
+  rejectReason: string | null;
+  quotedTotalPaise: number;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface SubOrderView {
+  id: string;
+  status: SubOrderStatus;
+  approvedStoreId: string;
+  approvedStoreName: string;
+  currentStoreName: string | null;
+  lines: QuoteLineView[];
+  approvedAmountPaise: number;
+  attemptCount: number;
+  maxAttempts: 3;
+  attempts: AttemptView[];
+  refundPaise: number | null;
+}
+
+export interface OrderView {
+  basketId: string;
+  transactionId: string;
+  basketStatus: BasketStatus;
+  /** Payment and fulfilment are separate (ORD-03). */
+  paymentStatus: PaymentStatus;
+  grandTotalPaise: number;
+  refundedPaise: number;
+  settled: boolean;
+  subOrders: SubOrderView[];
+  createdAt: string;
+}
+
+// ---------- Optimiser: POST /bap/plan {needs:[{query, qty}], budgetPaise?} → PlanResult ----------
+
+export interface PlanNeed {
+  query: string;
+  qty: number;
+}
+
+export interface PlanChoice {
+  query: string;
+  qty: number;
+  offer: SearchOffer;
+  /** One line, built from the numbers, e.g. "₹12 cheaper than Gupta Kirana". */
+  reason: string;
+}
+
+export interface PlanResult {
+  choices: PlanChoice[];
+  stores: { storeId: string; storeName: string; itemsTotalPaise: number; deliveryPaise: number }[];
+  estimatedTotalPaise: number;
+  budgetPaise: number | null;
+  withinBudget: boolean | null;
+  /** Basket-level reasons, e.g. "Adding Lakshmi Stores saves ₹38 even after ₹30 delivery". */
+  reasons: string[];
+  unmatched: { query: string; reason: string }[];
+  looseDeclined: LooseDeclined[];
+}
+
+// ---------- Agent (lane C): POST /bap/agent/chat {message} → AgentReply | 503 {error: "agent_unavailable"} ----------
+
+export type AgentEvent =
+  | { type: "basket_updated" }
+  | { type: "quote_ready"; quoteId: string; grandTotalPaise: number }
+  | { type: "approval_requested"; basketId: string; quoteHash: string; grandTotalPaise: number }
+  | { type: "loose_declined"; query: string; reason: string; alternative: LooseDeclined["alternative"] };
+
+export interface AgentReply {
+  text: string;
+  events: AgentEvent[];
+  /** Tool calls made this turn, for the "thinking…" steps. */
+  steps: { tool: string; ok: boolean }[];
+}
+
+// ---------- Small helpers ----------
+
+export function packLabel(packSize: number, unit: string): string {
+  return `${packSize} ${unit}`;
+}

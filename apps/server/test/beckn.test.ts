@@ -87,9 +87,9 @@ describe("Beckn layer + gateway (T03)", () => {
 
   it("issues persona tokens and enforces roles", async () => {
     const cust = await tokenFor(t.url, { role: "customer", id: "cust_priya" });
-    expect((await fetch(`${t.url}/admin/whoami`, { headers: { authorization: `Bearer ${cust}` } })).status).toBe(403);
-    expect((await fetch(`${t.url}/admin/whoami`, { headers: { authorization: `Bearer ${admin}` } })).status).toBe(200);
-    expect((await fetch(`${t.url}/admin/whoami`, { headers: { authorization: `Bearer ${cust}x` } })).status).toBe(401);
+    expect((await fetch(`${t.url}/admin/api/whoami`, { headers: { authorization: `Bearer ${cust}` } })).status).toBe(403);
+    expect((await fetch(`${t.url}/admin/api/whoami`, { headers: { authorization: `Bearer ${admin}` } })).status).toBe(200);
+    expect((await fetch(`${t.url}/admin/api/whoami`, { headers: { authorization: `Bearer ${cust}x` } })).status).toBe(401);
     expect((await post("/auth/persona", { role: "admin", passcode: "wrong" })).status).toBe(401);
     expect((await post("/auth/persona", { role: "merchant", id: "store_nope" })).status).toBe(404);
     const personas = (await (await fetch(`${t.url}/auth/personas`)).json()) as { stores: unknown[]; customers: unknown[] };

@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { CALLBACK_ACTIONS, type CallbackAction } from "@kiranaai/shared";
 import { registerBecknActions, type BecknHandler, type BecknHandlers } from "../beckn/receiver.js";
 import { bapCallbackHandlers } from "./callbacks.js";
+import { bapApiRoutes } from "./api/index.js";
+import { agentRoutes } from "./agent/index.js";
 
 /** BAP module (/bap): Beckn callbacks; customer APIs (T06+) and the agent (T10) mount here too. */
 export const bapRoutes: FastifyPluginAsync = async (app) => {
@@ -15,4 +17,7 @@ export const bapRoutes: FastifyPluginAsync = async (app) => {
     };
   }
   registerBecknActions(app, { actor: "bap", actions: CALLBACK_ACTIONS, verify: "bpp", handlers });
+  await app.register(bapApiRoutes);
+  await app.register(agentRoutes, { prefix: "/agent" });
+  // Lane B: register the dispatch reconciler here with app.ctx.ticker.add({ name: "bap.reconciler", everyMs: 5000, run }).
 };

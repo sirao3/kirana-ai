@@ -19,3 +19,18 @@ describe("health", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("SPA routes vs API prefixes", () => {
+  it("serves the web app for /admin and /wall but JSON for /admin/api", async () => {
+    const t = await startTestApp({ WEB_DIST: new URL("../../web/dist", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1") });
+    try {
+      for (const p of ["/admin", "/wall", "/shop/orders/bsk_1"]) {
+        const r = await fetch(`${t.url}${p}`);
+        expect(r.headers.get("content-type")).toContain("text/html");
+      }
+      expect((await fetch(`${t.url}/admin/api/whoami`)).status).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+});

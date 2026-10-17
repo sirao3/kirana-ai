@@ -5,6 +5,7 @@ Agentic commerce for kirana stores on Beckn/ONDC. 24–48 h hackathon, hosted on
 ## Source of truth
 - `artifacts/PRD.md` — requirements v2.1 (architecture, state machines, dispatch rules, demo script, decisions).
 - `artifacts/TASKS.md` — sequential tasks T01–T18 with "Done when" checks, a 24 h cut list, and 3 parallel lanes (A seller / B buyer / C agent+UI) after T03.
+- `artifacts/LANES.md` — lane ownership, rules and the BPP⇄BAP / merchant / admin contracts. BAP HTTP API types: `packages/shared/src/api.ts`.
 Read both before starting a task. If code and PRD disagree, raise it; don't silently diverge.
 
 ## Current status (18 Oct 2026)
@@ -13,6 +14,8 @@ Read both before starting a task. If code and PRD disagree, raise it; don't sile
 - `deploy/gcp-setup.sh` (idempotent) created secrets `db-password`, `admin-passcode`, `gemini-api-key`, service account `kiranaai-run`, firewall `kiranaai-allow-pg`, the VM and the budget. `deploy/gcp-deploy.sh` deploys.
 - Background jobs must register with `app.ctx.ticker` (runs on boot, every 1 s, and from an onRequest hook) — never a bare setInterval.
 - Local: `docker compose up -d postgres` (port 5433, user/pass/db `kiranaai`); tests use it.
+- Done: T01–T03 (hosted round-trip works). URL: https://kiranaai-769889659635.us-central1.run.app. Admin API is `/admin/api/*` (`/admin` is the web page).
+- The agent calls the BAP over loopback HTTP with an allowlist (no approve/pay), not in-process functions.
 - `gcloud` CLI is installed and signed in; on Git Bash, pass Windows paths (`cygpath -w`) to gcloud file flags.
 
 ## Gemini
