@@ -1,25 +1,19 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BasketView, PlanResult, SearchResponse } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
-import {
-  Button, Card, CircularProgress, cx, EmptyState, Icon, IconButton, InlineMessage, InputChip, QtyStepper, SearchBar, StatusLabel, TextField, useSnackbar,
-} from "../m3";
+import { Button, C, IArrowUpRight, IClose, IPlus, ISearch, SearchField, Spinner, TextField, cx, ease, soft } from "../ui";
+import { useSnackbar } from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
 import { useAddress } from "./useAddress";
 import { addNeed as addToList, cheapestListingId, choicesToBasketItems, effectiveLabel, loadRecent, parseNeeds, pushRecent, rankOffers, type ListNeed } from "./pricing";
-
-type Need = ListNeed;
+import { LINK } from "./tokens";
 
 const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 
-interface Option {
-  key: string;
-  text: string;
-  hint?: string;
-  recent?: boolean;
-}
+interface Option { key: string; text: string; hint?: string; recent?: boolean }
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -30,15 +24,19 @@ function useDebounced<T>(value: T, ms: number): T {
   return v;
 }
 
-/** Manual mode (works without the assistant): search → offers per product → Add; shopping list → optimiser. */
-export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Set<string>; onOpenBasket: () => void }) {
+const H2 = "px-1 text-[12px] font-semibold uppercase tracking-[0.04em]";
+
+/**
+ * Search & plan, without the assistant: search with suggestions → each product with its stores (effective price,
+ * cheapest said in words) → Add / Add to list; and a whole list through the optimiser. Hairline rows, price strongest.
+ */
+export function ManualPanel({ basketItemIds }: { basketItemIds: Set<string> }) {
   const qc = useQueryClient();
   const snack = useSnackbar();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [needText, setNeedText] = useState("");
-  const [needQty, setNeedQty] = useState(1);
-  const [needs, setNeeds] = useState<Need[]>([]);
+  const [needs, setNeeds] = useState<ListNeed[]>([]);
   const [plan, setPlan] = useState<PlanResult | null>(null);
   const [budget, setBudget] = useState("");
 
@@ -96,327 +94,206 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
       e.preventDefault();
       setDismissed(false);
       setActive((a) => (e.key === "ArrowDown" ? (a + 1) % options.length : (a <= 0 ? options.length : a) - 1));
-    } else if (e.key === "Enter" && open && active >= 0 && options[active]) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      runSearch(options[active]!.text);
+      runSearch(open && active >= 0 && options[active] ? options[active]!.text : q);
     } else if (e.key === "Escape" && open) {
       e.preventDefault();
       setDismissed(true);
       setActive(-1);
     }
   }
+
   const add = useMutation({
     mutationFn: (v: { listingId: string; label: string }) => bap.addItem(v.listingId, 1),
     onSuccess: (b: BasketView, v) => {
       qc.setQueryData(["basket"], b);
-      snack(`Added ${v.label}`, { label: "View basket", onClick: onOpenBasket });
+      snack(`Added ${v.label}`);
     },
   });
   const optimise = useMutation({
     mutationFn: async () => {
       const b = budget.trim() ? Math.round(Number(budget) * 100) : undefined;
       const p = await bap.plan(needs, b && b > 0 ? b : undefined);
-      // Merge needs that resolved to the same listing; carry the optimiser's own reasons onto the lines.
       const items = choicesToBasketItems(p);
-      if (items.length) {
-        const basket = await bap.replace(items, p.reasons);
-        qc.setQueryData(["basket"], basket);
-      }
+      if (items.length) qc.setQueryData(["basket"], await bap.replace(items, p.reasons));
       return p;
     },
     onSuccess: setPlan,
   });
 
-  /** "atta, toor dal x2, milk x8" adds three needs; the stepper applies to a single item without its own quantity. */
+  /** "atta, toor dal x2, milk x8" adds three needs. */
   function submitNeeds() {
     const parsed = parseNeeds(needText);
     if (!parsed.length) return;
-    if (parsed.length === 1 && parsed[0]!.qty === 1) parsed[0]!.qty = needQty;
     setNeeds((list) => parsed.reduce(addToList, list));
     setNeedText("");
-    setNeedQty(1);
   }
   function addProductToList(canonicalProductId: string, name: string) {
     setNeeds((list) => addToList(list, { query: name, qty: 1, canonicalProductId }));
-    snack(`${name} added to your list`, { label: "View list", onClick: () => document.getElementById("shopping-list")?.scrollIntoView({ behavior: "smooth", block: "start" }) });
+    snack(`${name} added to your list`);
   }
-
+  const setNeedQty = (i: number, qty: number) => setNeeds((x) => (qty < 1 ? x.filter((_, j) => j !== i) : x.map((n, j) => (j === i ? { ...n, qty } : n))));
   const budgetInvalid = budget.trim() !== "" && !(Number(budget) > 0);
 
   return (
-    <div className="space-y-8 py-4">
-      {/* ---- Find a product ---- */}
-      <section aria-labelledby="find-title" className="space-y-4">
-        <div>
-          <h2 id="find-title" className="type-title-medium text-on-surface">Find a product</h2>
-          <p className="type-body-medium text-on-surface-variant">Compare the same pack across nearby stores. Cheapest first.</p>
-        </div>
+    <div className="space-y-8 pb-6 pt-3">
+      <section aria-labelledby="find-title">
+        <h2 id="find-title" className="sr-only">Find a product</h2>
         <div className="relative">
-          <SearchBar
-            label="Search products"
-            placeholder="atta, gehun ka aata, toor dal, milk…"
-            value={q}
-            onValueChange={(v) => {
-              setQ(v);
-              setDismissed(false);
-              setActive(-1);
-            }}
-            busy={search.isPending}
-            onSubmit={() => runSearch(q)}
-            inputProps={{
-              role: "combobox",
-              "aria-expanded": open,
-              "aria-controls": listboxId,
-              "aria-autocomplete": "list",
-              "aria-activedescendant": open && active >= 0 ? `${listboxId}-${active}` : undefined,
-              autoComplete: "off",
-              onFocus: () => { setFocused(true); setDismissed(false); },
-              onBlur: () => setFocused(false),
-              onKeyDown: onSearchKey,
-            }}
-            trailing={
-              search.isPending ? (
-                <span className="flex h-12 w-12 items-center justify-center text-primary"><CircularProgress size={24} label="Searching" /></span>
-              ) : (
-                <IconButton icon="arrow_forward" label="Search" variant="filled" type="submit" disabled={!q.trim()} size={48} />
-              )
-            }
+          <SearchField label="Search products" placeholder="atta, gehun ka aata, toor dal…" value={q} busy={search.isPending}
+            onValueChange={(v) => { setQ(v); setDismissed(false); setActive(-1); }}
+            role="combobox" aria-expanded={open} aria-controls={listboxId} aria-autocomplete="list"
+            aria-activedescendant={open && active >= 0 ? `${listboxId}-${active}` : undefined} autoComplete="off" enterKeyHint="search"
+            onFocus={() => { setFocused(true); setDismissed(false); }} onBlur={() => setFocused(false)} onKeyDown={onSearchKey}
+            className="focus-within:ring-2 focus-within:ring-[#007AFF]/40"
           />
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-label={typed.length < 2 ? "Recent searches" : "Suggestions"}
-            hidden={!open}
-            className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg bg-surface-container shadow-2"
-          >
-            {options.map((o, i) => (
-              <div
-                key={o.key}
-                id={`${listboxId}-${i}`}
-                role="option"
-                aria-selected={i === active}
-                // mouseDown (not click) so the input keeps focus until the choice is made
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  runSearch(o.text);
-                }}
-                onMouseMove={() => setActive(i)}
-                className={cx("flex min-h-12 cursor-pointer items-center gap-3 px-4 py-2", i === active ? "bg-surface-container-highest" : "hover:bg-surface-container-high")}
-              >
-                <Icon name={o.recent ? "history" : "search"} size={20} className="shrink-0 text-on-surface-variant" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate type-body-large text-on-surface">{o.text}</span>
-                  {o.hint && <span className="block truncate type-body-small text-on-surface-variant">{o.hint}</span>}
-                </span>
-              </div>
-            ))}
-            {options.length === 0 && waiting && (
-              <p role="status" className="flex min-h-12 items-center gap-3 px-4 type-body-medium text-on-surface-variant">
-                <CircularProgress size={18} label="Finding suggestions" /> Finding products…
-              </p>
-            )}
-            {options.length === 0 && !waiting && suggestQ.isError && (
-              <p role="status" className="flex min-h-12 items-center px-4 type-body-medium text-on-surface-variant">
-                No suggestions right now. Press Enter to search for “{typed}”.
-              </p>
-            )}
-          </div>
+              <motion.div id={listboxId} role="listbox" aria-label={typed.length < 2 ? "Recent searches" : "Suggestions"} hidden={!open}
+                initial={false} animate={open ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: -4, scale: 0.98 }} transition={soft}
+                className="absolute inset-x-0 top-full z-20 mt-1.5 origin-top overflow-hidden rounded-[14px] bg-white py-1" style={{ boxShadow: "0 0 0 0.5px rgba(0,0,0,0.08), 0 16px 40px rgba(0,0,0,0.16)" }}>
+                {options.map((o, i) => (
+                  <div key={o.key} id={`${listboxId}-${i}`} role="option" aria-selected={i === active}
+                    // mouseDown (not click) so the input keeps focus until the choice is made
+                    onMouseDown={(e) => { e.preventDefault(); runSearch(o.text); }} onMouseMove={() => setActive(i)}
+                    className={cx("flex min-h-11 cursor-pointer items-center gap-3 px-4 py-1.5", i === active && "bg-black/[0.04]")}>
+                    <span className="shrink-0" style={{ color: C.tertiary }}>{o.recent ? <IArrowUpRight size={15} /> : <ISearch size={15} />}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px]" style={{ color: C.label }}>{o.text}</span>
+                      {o.hint && <span className="block truncate text-[12px]" style={{ color: C.secondary }}>{o.hint}</span>}
+                    </span>
+                  </div>
+                ))}
+                {options.length === 0 && waiting && <p role="status" className="flex min-h-11 items-center gap-2.5 px-4 text-[14px]" style={{ color: C.secondary }}><Spinner size={14} /> Finding products…</p>}
+                {options.length === 0 && !waiting && suggestQ.isError && <p role="status" className="flex min-h-11 items-center px-4 text-[14px]" style={{ color: C.secondary }}>No suggestions right now. Press Enter to search for “{typed}”.</p>}
+              </motion.div>
         </div>
-        {search.error && <InlineMessage tone="error">{errorMessage(search.error)}</InlineMessage>}
-        {add.error && <InlineMessage tone="error">{errorMessage(add.error)}</InlineMessage>}
+        {!results && !search.isPending && <p className="mt-2 px-1 text-[13px]" style={{ color: C.secondary }}>Compare the same pack across the stores on the map, delivery included.</p>}
+        {search.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(search.error)}</p>}
+        {add.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(add.error)}</p>}
 
         {results && (
-          <div className="space-y-4">
+          <motion.div key={results.query} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.05 } } }} className="mt-4 space-y-5" aria-live="polite">
             {results.looseDeclined.map((l) => (
-              <InlineMessage
-                key={l.query}
-                tone="warning"
-                icon="scale"
-                title={`“${l.query}” is not sold loose`}
-                action={
-                  l.alternative?.listingId ? (
-                    <Button variant="tonal" icon="add" size="sm" loading={add.isPending && add.variables?.listingId === l.alternative.listingId} onClick={() => add.mutate({ listingId: l.alternative!.listingId!, label: l.alternative!.name })}>
-                      Add packaged
-                    </Button>
-                  ) : undefined
-                }
-              >
-                {l.reason}
-                {l.alternative && <> Packaged option: <b>{l.alternative.name}</b>.</>}
-              </InlineMessage>
+              <motion.div key={l.query} variants={rise} transition={soft} className="rounded-[14px] px-4 py-3" style={{ background: "#FFF4E0" }}>
+                <p className="text-[14px] font-semibold" style={{ color: C.label }}>“{l.query}” isn't sold loose</p>
+                <p className="mt-0.5 text-[13px] leading-[1.45]" style={{ color: C.secondary }}>{l.reason}{l.alternative && <> Packaged option: <b style={{ color: C.label }}>{l.alternative.name}</b>.</>}</p>
+                {l.alternative?.listingId && (
+                  <Button size="sm" variant="secondary" className="mt-2 bg-white" icon={<IPlus size={14} />} busy={add.isPending && add.variables?.listingId === l.alternative.listingId}
+                    onClick={() => add.mutate({ listingId: l.alternative!.listingId!, label: l.alternative!.name })}>Add packaged</Button>
+                )}
+              </motion.div>
             ))}
             {results.groups.length === 0 && results.looseDeclined.length === 0 && (
-              <EmptyState icon="search_off" title={`No nearby store has “${results.query}”`}>
-                {tooFar.length > 0
-                  ? <>{tooFar.length === address?.stores.length ? "No store delivers to your address." : `${tooFar.length} store${tooFar.length === 1 ? "" : "s"} can't deliver to your address.`} Try another name, or change the delivery address.</>
-                  : "Try another name, like “aata” or “dal”, or a brand."}
-              </EmptyState>
+              <div className="px-1 py-6 text-center">
+                <p className="text-[17px] font-semibold" style={{ color: C.label }}>No nearby store has “{results.query}”</p>
+                <p className="mt-1 text-[14px]" style={{ color: C.secondary }}>
+                  {tooFar.length > 0 ? `${tooFar.length === address?.stores.length ? "No store delivers to your address." : `${tooFar.length} store${tooFar.length === 1 ? "" : "s"} can't deliver to your address.`} Try another name, or change the address.` : "Try another name, like “aata” or “dal”, or a brand."}
+                </p>
+              </div>
             )}
             {results.groups.map((g) => {
               const cheapestId = cheapestListingId(g.offers);
               const onList = needs.some((n) => n.canonicalProductId === g.canonicalProductId);
               return (
-              <Card key={g.canonicalProductId} variant="outlined" className="overflow-hidden">
-                <header className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-4 pb-1 pt-3">
-                  <div className="min-w-0 flex-1 basis-48">
-                    <h3 className="type-title-small text-on-surface">
-                      {g.name} <span className="font-normal text-on-surface-variant">· {g.packLabel}</span>
+                <motion.section key={g.canonicalProductId} variants={rise} transition={soft} aria-label={`${g.name} ${g.packLabel}`}>
+                  <div className="flex items-end justify-between gap-3 px-1 pb-1.5">
+                    <h3 className="min-w-0 text-[15px] font-semibold leading-tight" style={{ color: C.label }}>
+                      {g.name} <span className="font-normal" style={{ color: C.secondary }}>{g.packLabel}</span>
                     </h3>
-                    <p className="type-body-small text-on-surface-variant">{g.offers.length} store{g.offers.length === 1 ? "" : "s"}</p>
+                    <button type="button" onClick={() => addProductToList(g.canonicalProductId, g.name)} aria-label={`${onList ? "Add one more" : "Add"} ${g.name} to list`}
+                      className="-my-2 min-h-11 shrink-0 cursor-pointer px-1 text-[13px] font-semibold" style={{ color: LINK }}>{onList ? "On list · add 1" : "Add to list"}</button>
                   </div>
-                  <Button
-                    variant="text"
-                    size="sm"
-                    icon={onList ? "check" : "playlist_add"}
-                    onClick={() => addProductToList(g.canonicalProductId, g.name)}
-                    aria-label={`${onList ? "Add one more" : "Add"} ${g.name} to list`}
-                  >
-                    {onList ? "On list" : "Add to list"}
-                  </Button>
-                </header>
-                <ul>
-                  {rankOffers(g.offers).map((o) => {
-                    const inBasket = basketItemIds.has(o.listingId);
-                    return (
-                      <li key={o.listingId} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
-                        <Icon name="storefront" className="text-on-surface-variant" />
-                        <div className="min-w-0 flex-1 basis-36">
-                          <p className="truncate type-body-large text-on-surface">{o.storeName}</p>
-                          <p className="type-body-small text-on-surface-variant">{km(o.distanceM)} · {effectiveLabel(o)}</p>
-                          {o.listingId === cheapestId && <StatusLabel tone="success" icon="savings" className="mt-1 h-6">Cheapest with delivery</StatusLabel>}
-                        </div>
-                        <span className="text-right">
-                          <span className="block type-title-medium tabular-nums text-on-surface">{formatINR(o.pricePaise)}</span>
-                          {o.mrpPaise > o.pricePaise && <span className="block type-body-small text-on-surface-variant line-through">{formatINR(o.mrpPaise)}</span>}
-                        </span>
-                        <Button
-                          variant={inBasket ? "outlined" : "tonal"}
-                          size="sm"
-                          icon="add"
-                          loading={add.isPending && add.variables?.listingId === o.listingId}
-                          disabled={add.isPending}
-                          onClick={() => add.mutate({ listingId: o.listingId, label: `${o.name} from ${o.storeName}` })}
-                          aria-label={`${inBasket ? "Add one more" : "Add"} ${o.name} from ${o.storeName}`}
-                        >
-                          {inBasket ? "1 more" : "Add"}
-                        </Button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Card>
+                  <ul className="overflow-hidden rounded-[14px] bg-white" style={{ boxShadow: "0 0 0 0.5px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03)" }}>
+                    {rankOffers(g.offers).map((o, i) => {
+                      const inBasket = basketItemIds.has(o.listingId);
+                      return (
+                        <li key={o.listingId} className="flex items-center gap-3 py-2.5 pl-4 pr-2.5" style={{ borderTop: i ? `0.5px solid ${C.sep}` : undefined }}>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[15px]" style={{ color: C.label }}>{o.storeName}</p>
+                            <p className="text-[12px] leading-[1.35]" style={{ color: C.secondary }}>{km(o.distanceM)} · {effectiveLabel(o)}</p>
+                            {o.listingId === cheapestId && <p className="text-[12px] font-semibold" style={{ color: "#1A7536" }}>Cheapest with delivery</p>}
+                          </div>
+                          <span className="text-right">
+                            <span className="block text-[17px] font-semibold tracking-[-0.01em]" style={{ color: C.label, fontVariantNumeric: "tabular-nums" }}>{formatINR(o.pricePaise)}</span>
+                            {o.mrpPaise > o.pricePaise && <span className="block text-[12px] line-through" style={{ color: C.secondary, fontVariantNumeric: "tabular-nums" }}>{formatINR(o.mrpPaise)}</span>}
+                          </span>
+                          <Button size="sm" variant="secondary" className="h-9 min-w-[64px]" busy={add.isPending && add.variables?.listingId === o.listingId} disabled={add.isPending}
+                            onClick={() => add.mutate({ listingId: o.listingId, label: `${o.name} from ${o.storeName}` })} aria-label={`${inBasket ? "Add one more" : "Add"} ${o.name} from ${o.storeName}`}>
+                            {inBasket ? "+1" : "Add"}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </motion.section>
               );
             })}
             {tooFar.length > 0 && (results.groups.length > 0 || results.looseDeclined.length > 0) && (
-              <section aria-label="Stores that don't deliver to you" className="rounded-md border border-dashed border-outline-variant p-3">
-                <p className="mb-1 flex items-center gap-2 type-title-small text-on-surface-variant"><Icon name="block" size={20} /> Doesn't deliver to you</p>
-                <ul className="space-y-1">
-                  {tooFar.map((s) => (
-                    <li key={s.storeId} className="flex flex-wrap items-baseline gap-x-2 type-body-medium text-on-surface-variant">
-                      <span>{s.name}</span>
-                      <span className="type-body-small">{km(s.distanceM)} away, delivers within {km(s.radiusM)}</span>
-                    </li>
-                  ))}
+              <motion.section variants={rise} transition={soft} aria-label="Stores that don't deliver to you">
+                <h3 className={H2} style={{ color: C.secondary }}>Doesn't deliver to you</h3>
+                <ul className="mt-1 px-1 text-[13px]" style={{ color: C.secondary }}>
+                  {tooFar.map((s) => <li key={s.storeId}>{s.name} · {km(s.distanceM)} away, delivers within {km(s.radiusM)}</li>)}
                 </ul>
-              </section>
+              </motion.section>
             )}
             {results.groups.length > 0 && (
-              <p className="type-body-small text-on-surface-variant">
-                Catalogue prices. Delivery is charged per store, not per item, so buying several items from one store shares it. Each store confirms price and stock when you get a quote.
-              </p>
+              <motion.p variants={rise} transition={soft} className="px-1 text-[12px] leading-[1.45]" style={{ color: C.secondary }}>
+                Catalogue prices. Delivery is per store, not per item, so several items from one store share it. Stores confirm price and stock when you get the verified total.
+              </motion.p>
             )}
-          </div>
+          </motion.div>
         )}
       </section>
 
-      {/* ---- Plan a list (optimiser) ---- */}
-      <Card id="shopping-list" variant="filled" className="scroll-mt-4 space-y-4 p-4 sm:p-6" aria-labelledby="plan-title">
-        <div className="flex items-start gap-3">
-          <Icon name="route" className="mt-0.5 text-primary" />
-          <div>
-            <h2 id="plan-title" className="type-title-medium text-on-surface">Plan a whole list</h2>
-            <p className="type-body-medium text-on-surface-variant">Add items, then let the optimiser pick stores and weigh delivery charges. It replaces your basket.</p>
-          </div>
-        </div>
-
-        <form
-          className="flex flex-wrap items-start gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submitNeeds();
-          }}
-        >
-          <TextField className="min-w-48 flex-1" label="Item" value={needText} onValueChange={setNeedText} supportingText="One item, or a list: atta, toor dal x2, milk x8" />
-          <div className="flex h-14 items-center gap-3">
-            <QtyStepper label="Packs" value={needQty} onChange={setNeedQty} />
-            <Button type="submit" variant="tonal" icon="playlist_add" disabled={!needText.trim()}>Add</Button>
-          </div>
+      <section id="shopping-list" aria-labelledby="plan-title" className="scroll-mt-4">
+        <h2 id="plan-title" className="text-[20px] font-bold tracking-[-0.02em]" style={{ color: C.label }}>Plan a whole list</h2>
+        <p className="mt-0.5 text-[13px] leading-[1.45]" style={{ color: C.secondary }}>Add items, then the optimiser picks stores and weighs delivery charges. It replaces your basket.</p>
+        <form className="mt-3 flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); submitNeeds(); }}>
+          <TextField className="flex-1" label="Item" value={needText} onValueChange={setNeedText} placeholder="atta, toor dal x2, milk x8" help="One item, or a list with quantities" />
+          <Button type="submit" variant="secondary" className="mb-[22px]" disabled={!needText.trim()}>Add</Button>
         </form>
-
         {needs.length > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="Shopping list">
-            {needs.map((n, i) => (
-              <li key={`${n.query}-${i}`}>
-                <InputChip removeLabel={`Remove ${n.query}`} onRemove={() => setNeeds((x) => x.filter((_, j) => j !== i))}>
-                  {n.qty} × {n.query}
-                </InputChip>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="type-body-medium text-on-surface-variant">Your list is empty.</p>
-        )}
-
-        <div className="flex flex-wrap items-start gap-3">
-          <TextField
-            className="w-48"
-            label="Budget (optional)"
-            prefix="₹"
-            inputMode="decimal"
-            value={budget}
-            onValueChange={setBudget}
-            error={budgetInvalid ? "Enter an amount like 1500" : null}
-          />
-          <Button className="mt-2" icon="auto_fix_high" loading={optimise.isPending} disabled={!needs.length || budgetInvalid} onClick={() => optimise.mutate()}>
-            Optimise basket
-          </Button>
-        </div>
-        {optimise.error && <InlineMessage tone="error">{errorMessage(optimise.error)}</InlineMessage>}
-
-        {plan && (
-          <div className="space-y-3 rounded-md bg-surface p-4">
-            <p className="flex flex-wrap items-center gap-2 type-title-small text-on-surface">
-              <Icon name="check_circle" className="text-primary" />
-              Basket updated · estimate {formatINR(plan.estimatedTotalPaise)}
-              {plan.withinBudget === false && <StatusLabel tone="warning" icon="warning">Over budget</StatusLabel>}
-              {plan.withinBudget === true && <StatusLabel tone="success" icon="savings">Within budget</StatusLabel>}
-            </p>
-            <ul className="space-y-2 type-body-medium">
-              {plan.choices.map((c) => (
-                <li key={`${c.query}-${c.offer.listingId}`} className="flex gap-2">
-                  <Icon name="check" size={20} className="text-primary" />
-                  <span>
-                    <span className="text-on-surface">{c.qty} × {c.offer.name}</span> <span className="text-on-surface-variant">at {c.offer.storeName} — {c.reason}</span>
+          <ul aria-label="Shopping list" className="mt-3 overflow-hidden rounded-[14px] bg-white" style={{ boxShadow: "0 0 0 0.5px rgba(0,0,0,0.06)" }}>
+            <AnimatePresence initial={false}>
+              {needs.map((n, i) => (
+                <motion.li key={n.query} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={soft}
+                  className="flex items-center gap-2 pl-4 pr-1.5" style={{ borderTop: i ? `0.5px solid ${C.sep}` : undefined }}>
+                  <span className="min-w-0 flex-1 truncate py-2.5 text-[15px]" style={{ color: C.label }}>{n.query}</span>
+                  <span className="flex items-center rounded-[10px]" style={{ background: C.fill }}>
+                    <button type="button" aria-label={`Fewer: ${n.query}`} onClick={() => setNeedQty(i, n.qty - 1)} className="h-9 w-9 cursor-pointer text-[18px]" style={{ color: C.label }}>−</button>
+                    <span className="min-w-5 text-center text-[14px] font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{n.qty}</span>
+                    <button type="button" aria-label={`More: ${n.query}`} onClick={() => setNeedQty(i, n.qty + 1)} className="h-9 w-9 cursor-pointer text-[18px]" style={{ color: C.label }}>+</button>
                   </span>
-                </li>
+                  <button type="button" aria-label={`Remove ${n.query}`} onClick={() => setNeedQty(i, 0)} className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full hover:bg-black/[0.04]" style={{ color: C.tertiary }}><IClose size={15} /></button>
+                </motion.li>
               ))}
-              {plan.reasons.map((r) => (
-                <li key={r} className="flex gap-2 text-on-surface-variant">
-                  <Icon name="lightbulb" size={20} className="text-tertiary" />
-                  {r}
-                </li>
-              ))}
-              {plan.unmatched.map((u) => (
-                <li key={u.query} className="flex gap-2 text-error">
-                  <Icon name="error" size={20} />
-                  {u.query}: {u.reason}
-                </li>
-              ))}
-            </ul>
-            <p className="type-body-small text-on-surface-variant">Get a verified quote from your basket for the exact total.</p>
-          </div>
-        )}
-      </Card>
+            </AnimatePresence>
+          </ul>
+        ) : <p className="mt-3 px-1 text-[13px]" style={{ color: C.secondary }}>Your list is empty.</p>}
+        <div className="mt-4 flex items-start gap-2">
+          <TextField className="w-40" label="Budget (optional)" prefix="₹" inputMode="decimal" value={budget} onValueChange={setBudget} error={budgetInvalid ? "Enter an amount like 1500" : undefined} />
+          <Button className="mt-[22px] flex-1" busy={optimise.isPending} disabled={!needs.length || budgetInvalid} onClick={() => optimise.mutate()}>Optimise basket</Button>
+        </div>
+        {optimise.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(optimise.error)}</p>}
+        <AnimatePresence>
+          {plan && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={ease} role="status" className="mt-4 px-1">
+              <p className="text-[15px] font-semibold" style={{ color: C.label }}>
+                Basket updated · about {formatINR(plan.estimatedTotalPaise)}
+                {plan.withinBudget === false && <span style={{ color: C.red }}> · over budget</span>}
+                {plan.withinBudget === true && <span style={{ color: C.green }}> · within budget</span>}
+              </p>
+              <ul className="mt-1.5 space-y-1 text-[13px] leading-[1.45]" style={{ color: C.secondary }}>
+                {plan.choices.map((c) => <li key={`${c.query}-${c.offer.listingId}`}><span style={{ color: C.label }}>{c.qty}× {c.offer.name}</span> at {c.offer.storeName} · {c.reason}</li>)}
+                {plan.reasons.map((r) => <li key={r}>{r}</li>)}
+                {plan.unmatched.map((u) => <li key={u.query} style={{ color: C.red }}>{u.query}: {u.reason}</li>)}
+              </ul>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
     </div>
   );
 }
+
+const rise = { h: { opacity: 0, y: 8 }, s: { opacity: 1, y: 0 } };
