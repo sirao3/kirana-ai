@@ -131,7 +131,7 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
   const [turnId, setTurnId] = useState<string | null>(null);
   const [progress, setProgress] = useState<AgentTurnStep[]>([]);
   const idRef = useRef(1);
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [canVoice] = useState(voiceSupported);
   const voice = useVoiceRecorder((audio, seconds) => void sendVoice(audio, seconds));
@@ -149,7 +149,9 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    // Follow the newest message inside the list only; scrollIntoView would also scroll the page and outer panes.
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [msgs, thinking, progress.length]);
 
   // Poll the turn's tool steps once a second while the assistant works; stop when it reports done.
@@ -229,7 +231,7 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-4" aria-live="polite" aria-busy={thinking}>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-1 py-4" aria-live="polite" aria-busy={thinking}>
         {msgs.length === 0 ? (
           <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-2 pt-6 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-tertiary-container text-on-tertiary-container">
@@ -313,7 +315,6 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
             )}
           </ol>
         )}
-        <div ref={endRef} />
       </div>
 
       {(voice.state === "denied" || voice.state === "error") && (

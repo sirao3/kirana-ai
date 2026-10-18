@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BasketView, QuoteLineView, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
@@ -49,11 +49,8 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
   const quoteLine = (storeId: string, listingId: string): QuoteLineView | undefined => quoteStore(storeId)?.lines.find((l) => l.listingId === listingId);
   const subtotal = basket.stores.reduce((s, g) => s + g.itemsTotalPaise, 0);
   const suggested = basket.stores.reduce((n, g) => n + g.items.filter((i) => i.qtyInferred).length, 0);
-  const confirmRef = useRef<HTMLDivElement>(null);
+  // Shown at the top of the basket so nothing scrolls the customer away from where the basket starts.
   const showConfirm = confirmQty && suggested > 0;
-  useEffect(() => {
-    if (showConfirm) confirmRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [showConfirm]);
 
   return (
     <section aria-labelledby="basket-title" className="flex flex-col">
@@ -76,6 +73,21 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
         </EmptyState>
       ) : (
         <div className="space-y-4">
+          {showConfirm && (
+            <InlineMessage
+              tone="info"
+              icon="auto_awesome"
+              title={`We guessed ${suggested} quantit${suggested === 1 ? "y" : "ies"}`}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="text" onClick={onEditQty} disabled={confirmingQty}>Edit</Button>
+                  <Button size="sm" variant="tonal" icon="check" loading={confirmingQty} onClick={onConfirmQty}>Looks right</Button>
+                </div>
+              }
+            >
+              Check them below. Change a number or confirm to continue.
+            </InlineMessage>
+          )}
           {quoteErrors.length > 0 && (
             <InlineMessage tone="error" title="Some stores could not confirm your items">
               <ul className="mt-1 space-y-0.5">
@@ -171,23 +183,6 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
 
           {(edit.error || error) && <InlineMessage tone="error">{error ?? errorMessage(edit.error)}</InlineMessage>}
 
-          {showConfirm && (
-            <div ref={confirmRef}>
-            <InlineMessage
-              tone="info"
-              icon="auto_awesome"
-              title={`We guessed ${suggested} quantit${suggested === 1 ? "y" : "ies"}`}
-              action={
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="text" onClick={onEditQty} disabled={confirmingQty}>Edit</Button>
-                  <Button size="sm" variant="tonal" icon="check" loading={confirmingQty} onClick={onConfirmQty}>Looks right</Button>
-                </div>
-              }
-            >
-              Check them above. Change a number or confirm to continue.
-            </InlineMessage>
-            </div>
-          )}
 
           <Button className="w-full" icon={live ? "lock" : "verified"} loading={checkingOut} disabled={edit.isPending} onClick={onCheckout}>
             {checkingOut ? "Checking with stores…" : live ? `Review and pay ${formatINR(q!.grandTotalPaise)}` : "Get verified quote"}

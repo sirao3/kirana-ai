@@ -140,8 +140,18 @@ function useStatusAnnouncement(o: OrderView): string {
 }
 
 /** Customer order detail: payment status (separate from fulfilment) + one live timeline per store. */
-export function OrderDetail({ order: o }: { order: OrderView }) {
+/** Settled, or no store could fulfil anything (fully refunded): nothing left to watch on this order. */
+export function orderFinished(o: OrderView): boolean {
+  return o.settled || (o.subOrders.length > 0 && o.subOrders.every((s) => s.status === "FAILED_NO_FULFILMENT"));
+}
+
+/** `onNewOrder` adds a "Start a new order" action once the order is finished, so the customer is not left on a dead end. */
+export function OrderDetail({ order: o, onNewOrder }: { order: OrderView; onNewOrder?: () => void }) {
   const pay = PAYMENT[o.paymentStatus];
+  const [starting, setStarting] = useState(false);
+  const newOrder = onNewOrder && orderFinished(o) && (
+    <Button icon="auto_awesome" loading={starting} onClick={() => { setStarting(true); onNewOrder(); }}>Start a new order</Button>
+  );
   const said = useAttemptAnnouncements(o);
   const statusSaid = useStatusAnnouncement(o);
   return (
@@ -154,11 +164,16 @@ export function OrderDetail({ order: o }: { order: OrderView }) {
           <span className="flex h-14 w-14 shrink-0 animate-pop items-center justify-center rounded-lg bg-primary text-on-primary">
             <Icon name="verified" size={32} filled />
           </span>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="type-headline-small type-emphasized">Order settled</p>
             <p className="type-body-medium">All stores are done and payouts are complete.</p>
           </div>
+          {newOrder && <div className="shrink-0 max-sm:hidden">{newOrder}</div>}
         </section>
+      )}
+      {newOrder && (
+        // Below 640 px the banner is too narrow for the button; an unsettled finished order (all refunded) has no banner.
+        <div className={cx("flex", o.settled && "sm:hidden")}>{newOrder}</div>
       )}
 
       {o.settled && <ReceiptCard order={o} />}

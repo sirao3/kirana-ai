@@ -48,7 +48,10 @@ function OrderList({ orders, selected }: { orders: OrderView[]; selected?: strin
 
 function Detail({ id }: { id: string }) {
   const q = useLive(["order", id], () => bap.order(id));
-  if (q.data) return <OrderDetail order={q.data} />;
+  const nav = useNavigate();
+  // A finished order offers a fresh start: clear the old conversation, then back to the assistant.
+  const newOrder = () => void bap.chatReset().catch(() => undefined).then(() => nav("/shop"));
+  if (q.data) return <OrderDetail order={q.data} onNewOrder={newOrder} />;
   if (q.isError)
     return (
       <InlineMessage tone="error" action={<Button variant="text" onClick={() => void q.refetch()}>Retry</Button>}>

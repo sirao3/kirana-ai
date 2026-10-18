@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AgentEvent, BasketView, StoreQuoteError } from "@kiranaai/shared";
@@ -34,6 +34,9 @@ export function Shop() {
   const [confirmQty, setConfirmQty] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
   const [agentDown, setAgentDown] = useState<"unavailable" | "rate_limited" | null>(null);
+
+  // Each tab starts at the top of the page.
+  useEffect(() => window.scrollTo({ top: 0 }), [tab]);
 
   const basketQ = useLive(["basket"], bap.basket, { enabled: !!session });
   const wide = useMedia(EXPANDED);

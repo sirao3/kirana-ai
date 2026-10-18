@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
@@ -69,6 +69,10 @@ export function Demo() {
   const view: DemoView = params.get("view") === "stores" ? "stores" : "customer";
   const setView = (v: DemoView) => setParams(v === "stores" ? { view: v } : {}, { replace: true });
   const pendingOffers = usePendingOfferCount();
+  const storesRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (view === "stores") storesRef.current?.scrollTo({ top: 0 });
+  }, [view]);
 
   const orders = useLive(["demo-orders"], bap.orders, { enabled: ready });
   const basket = useLive(["basket"], bap.basket, { enabled: ready });
@@ -163,7 +167,7 @@ export function Demo() {
           )}
         </section>
 
-        <section aria-label="Stores" hidden={view !== "stores"} className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <section ref={storesRef} aria-label="Stores" hidden={view !== "stores"} className="min-h-0 flex-1 overflow-y-auto pr-1">
           {stores.isError && <InlineMessage tone="error">Could not load the stores.</InlineMessage>}
           {stores.isLoading && <div className="flex items-center gap-3 py-8 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading stores…</div>}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(268px,1fr))] items-start gap-3">

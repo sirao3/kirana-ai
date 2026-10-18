@@ -25,8 +25,14 @@ export function CustomerPane({ order }: { order: OrderView | null }) {
   const [quoteErrors, setQuoteErrors] = useState<StoreQuoteError[]>([]);
   const [agentDown, setAgentDown] = useState<"unavailable" | "rate_limited" | null>(null);
   const [confirmQty, setConfirmQty] = useState(false);
+  const [chatKey, setChatKey] = useState(0);
   const basketQ = useLive(["basket"], bap.basket);
   const basket = basketQ.data;
+
+  // Every tab opens at its top (hidden panels keep their old scroll position otherwise).
+  useEffect(() => {
+    document.getElementById(`panel-${tab}`)?.scrollTo({ top: 0 });
+  }, [tab]);
 
   // The first time a paid order appears in this session, follow it.
   const followed = useRef<string | null>(null);
@@ -68,6 +74,13 @@ export function CustomerPane({ order }: { order: OrderView | null }) {
       if (hasSuggested(fresh)) askToConfirm();
       else setApprovalOpen(true);
     });
+  }
+  /** After a finished order: clear the old conversation and go back to the assistant. */
+  async function newOrder() {
+    await bap.chatReset().catch(() => undefined);
+    setAgentDown(null);
+    setChatKey((k) => k + 1);
+    setTab("assistant");
   }
   function proceed(b: BasketView | undefined) {
     if (b && quoteIsLive(b)) setApprovalOpen(true);
@@ -129,7 +142,7 @@ export function CustomerPane({ order }: { order: OrderView | null }) {
         ]}
       />
       <TabPanel value="assistant" active={tab} className="min-h-0 flex-1 overflow-hidden">
-        <ChatPanel onEvents={onEvents} onAgentDown={setAgentDown} onUseManual={() => setTab("search")} onOpenBasket={() => setTab("basket")} onReview={review} />
+        <ChatPanel key={chatKey} onEvents={onEvents} onAgentDown={setAgentDown} onUseManual={() => setTab("search")} onOpenBasket={() => setTab("basket")} onReview={review} />
       </TabPanel>
       <TabPanel value="search" active={tab} className="min-h-0 flex-1 overflow-y-auto py-3">
         <ManualPanel basketItemIds={new Set(basket?.stores.flatMap((s) => s.items.map((i) => i.listingId)) ?? [])} onOpenBasket={() => setTab("basket")} />
@@ -137,7 +150,7 @@ export function CustomerPane({ order }: { order: OrderView | null }) {
       <TabPanel value="basket" active={tab} className="min-h-0 flex-1 overflow-y-auto py-3">{basketView}</TabPanel>
       <TabPanel value="order" active={tab} className="min-h-0 flex-1 overflow-y-auto py-3">
         {order ? (
-          <OrderDetail order={order} />
+          <OrderDetail order={order} onNewOrder={() => void newOrder()} />
         ) : (
           <EmptyState icon="receipt_long" title="No order yet">After you approve and pay, each store's progress shows up here.</EmptyState>
         )}
