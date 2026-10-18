@@ -1,21 +1,19 @@
 import { useEffect, useState, type MutableRefObject } from "react";
 import { api, ApiError } from "../../lib/api";
 import type { Session } from "../../lib/session";
-import { Button, Dialog, InlineMessage, TextField } from "../m3";
+import { Alert, Button, Notice, TextField } from "../ui";
 
 export type AdminAction = "arm" | "reset";
 
-const COPY: Record<AdminAction, { title: string; icon: string; body: string; confirm: string; danger: boolean }> = {
+const COPY: Record<AdminAction, { title: string; body: string; confirm: string; danger: boolean }> = {
   arm: {
     title: "Arm demo faults?",
-    icon: "build",
     body: "Sets the offer window to 45 s, turns Lakshmi's auto-reject off and makes Gupta Kirana never answer, so the §14 script plays out: Lakshmi is rejected by hand and Gupta times out. This changes settings for everyone using the demo.",
     confirm: "Arm faults",
     danger: false,
   },
   reset: {
     title: "Reset demo data?",
-    icon: "warning",
     body: "Wipes every basket, order, offer, ledger entry and audit row, restores the seed catalogue and brings all stores online. This can't be undone.",
     confirm: "Wipe and reseed",
     danger: true,
@@ -37,7 +35,7 @@ export async function runAdminAction(action: AdminAction, token: string): Promis
   );
 }
 
-/** Confirm dialog with an inline admin-passcode field. The passcode is never hard-coded. */
+/** Confirm alert with an inline admin-passcode field. The passcode is never hard-coded. */
 export function AdminActionDialog({ action, tokenRef, onClose, onDone }: {
   action: AdminAction | null;
   tokenRef: MutableRefObject<string | null>;
@@ -56,6 +54,7 @@ export function AdminActionDialog({ action, tokenRef, onClose, onDone }: {
 
   const copy = COPY[action ?? "arm"];
   const needPasscode = !tokenRef.current;
+  const close = () => { if (!busy) onClose(); };
 
   async function go() {
     if (!action) return;
@@ -82,22 +81,20 @@ export function AdminActionDialog({ action, tokenRef, onClose, onDone }: {
   }
 
   return (
-    <Dialog
+    <Alert
       open={action !== null}
-      onClose={onClose}
-      dismissible={!busy}
-      icon={copy.icon}
+      onClose={close}
       title={copy.title}
+      message={copy.body}
       actions={
         <>
-          <Button variant="text" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button variant={copy.danger ? "danger" : "filled"} icon={copy.danger ? "delete_forever" : "build"} loading={busy} disabled={needPasscode && !passcode} onClick={() => void go()}>
+          <Button variant="secondary" disabled={busy} onClick={close}>Cancel</Button>
+          <Button variant={copy.danger ? "danger" : "primary"} busy={busy} disabled={needPasscode && !passcode} onClick={() => void go()}>
             {copy.confirm}
           </Button>
         </>
       }
     >
-      <p>{copy.body}</p>
       {needPasscode && (
         <TextField
           className="mt-4"
@@ -109,7 +106,7 @@ export function AdminActionDialog({ action, tokenRef, onClose, onDone }: {
           onKeyDown={(e) => e.key === "Enter" && passcode && !busy && void go()}
         />
       )}
-      {error && <InlineMessage tone="error" className="mt-3">{error}</InlineMessage>}
-    </Dialog>
+      <div aria-live="polite">{error && <Notice tone="bad" className="mt-3">{error}</Notice>}</div>
+    </Alert>
   );
 }

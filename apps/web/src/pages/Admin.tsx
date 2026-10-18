@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { MotionConfig } from "motion/react";
 import { AuditViewer, LedgerPanel } from "../components/admin/LedgerAudit";
-import { ReadinessCard, ReadinessChip } from "../components/admin/Readiness";
+import { ReadinessGroup, ReadinessStatus } from "../components/admin/Readiness";
 import { ConfigPanel, FaultsPanel, ResetPanel } from "../components/admin/ControlPanels";
-import { AppShell, BrandMark, Button, Card, Icon, IconButton, InlineMessage, TextField, ThemeToggle, TopAppBar, type NavItem } from "../components/m3";
+import { AppFrame, Button, C, Card, FONT, IBank, IconButton, IEye, IList, ISliders, LargeTitle, TextField, type FrameNav } from "../components/ui";
 import { api, ApiError } from "../lib/api";
 import { getSession, setSession, type Session } from "../lib/session";
 
@@ -27,38 +28,38 @@ function Gate({ onAuthed }: { onAuthed: (s: Session) => void }) {
     }
   }
   return (
-    <div className="min-h-dvh bg-surface">
-      <TopAppBar leading={<BrandMark />} title="Admin console" actions={<ThemeToggle />} />
-      <main className="mx-auto flex max-w-md flex-col px-4 pt-10">
-        <Card variant="elevated" className="p-6">
-          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-secondary-container text-on-secondary-container">
-            <Icon name="admin_panel_settings" />
-          </span>
-          <h2 className="type-headline-small text-on-surface">Sign in</h2>
-          <p className="mb-6 mt-1 type-body-medium text-on-surface-variant">Enter the admin passcode to reset the demo, inject faults and read the ledger.</p>
-          <form onSubmit={submit} className="space-y-4">
-            <TextField
-              label="Passcode"
-              type={show ? "text" : "password"}
-              autoFocus
-              autoComplete="current-password"
-              value={passcode}
-              onValueChange={setPasscode}
-              error={error}
-              trailing={<IconButton type="button" icon={show ? "visibility_off" : "visibility"} label={show ? "Hide passcode" : "Show passcode"} onClick={() => setShow((v) => !v)} />}
-            />
-            <Button type="submit" className="w-full" icon="login" loading={busy} disabled={!passcode}>Sign in</Button>
-          </form>
-        </Card>
-      </main>
-    </div>
+    <main className="flex min-h-dvh items-center justify-center px-4 py-10" style={{ background: C.bg, fontFamily: FONT }}>
+      <Card className="w-full max-w-[400px]" padding={28}>
+        <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-[12px] text-[18px] font-bold text-white" style={{ background: C.green }} aria-hidden>K</span>
+        <h1 className="text-[24px] font-bold tracking-[-0.02em]" style={{ color: C.label }}>Admin console</h1>
+        <p className="mb-6 mt-1 text-[15px] leading-[1.45]" style={{ color: C.secondary }}>Reset the demo, set store faults and read the ledger.</p>
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          <TextField
+            label="Passcode"
+            type={show ? "text" : "password"}
+            autoFocus
+            autoComplete="current-password"
+            value={passcode}
+            onValueChange={(v) => { setPasscode(v); setError(null); }}
+            error={error}
+            trailing={<IconButton label={show ? "Hide passcode" : "Show passcode"} size={40} className="-mr-2" onClick={() => setShow((v) => !v)}><IEye off={show} size={19} /></IconButton>}
+          />
+          <p className="sr-only" role="alert">{error ?? ""}</p>
+          <Button type="submit" size="lg" full busy={busy} disabled={!passcode}>Sign in</Button>
+        </form>
+      </Card>
+    </main>
   );
 }
 
 type Dest = "controls" | "ledger" | "audit";
-const TITLES: Record<Dest, string> = { controls: "Controls", ledger: "Ledger", audit: "Audit" };
+const PAGES: Record<Dest, { title: string; subtitle: string }> = {
+  controls: { title: "Controls", subtitle: "Changes here apply to everyone using the demo right now." },
+  ledger: { title: "Ledger", subtitle: "One entry per delivered store order. Amounts in rupees." },
+  audit: { title: "Audit", subtitle: "Every Beckn message and state change, per transaction." },
+};
 
-/** /admin: Controls (settings, faults, reset), Ledger, Audit, as navigation destinations. */
+/** /admin: Controls (readiness, run settings, store faults, reset), Ledger, Audit. */
 export function Admin() {
   const [session, setLocal] = useState<Session | null>(() => {
     const s = getSession();
@@ -66,47 +67,38 @@ export function Admin() {
   });
   const [dest, setDest] = useState<Dest>("controls");
   const [resetOpen, setResetOpen] = useState(false);
-  if (!session) return <Gate onAuthed={setLocal} />;
-  const nav: NavItem[] = [
-    { key: "controls", label: "Controls", icon: "tune", onSelect: () => setDest("controls") },
-    { key: "ledger", label: "Ledger", icon: "account_balance", onSelect: () => setDest("ledger") },
-    { key: "audit", label: "Audit", icon: "fact_check", onSelect: () => setDest("audit") },
+  if (!session) return <MotionConfig reducedMotion="user"><Gate onAuthed={setLocal} /></MotionConfig>;
+
+  const nav: FrameNav[] = [
+    { key: "controls", label: "Controls", icon: <ISliders />, onSelect: () => setDest("controls") },
+    { key: "ledger", label: "Ledger", icon: <IBank />, onSelect: () => setDest("ledger") },
+    { key: "audit", label: "Audit", icon: <IList />, onSelect: () => setDest("audit") },
   ];
+  const openChecklist = () => {
+    setDest("controls");
+    setTimeout(() => {
+      const el = document.getElementById("demo-readiness");
+      el?.scrollIntoView({ block: "start", behavior: "smooth" });
+      el?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    }, 0);
+  };
+  const page = PAGES[dest];
   return (
-    <AppShell
-      nav={nav}
-      active={dest}
-      navLabel="Admin"
-      topBar={
-        <TopAppBar
-          leading={<BrandMark />}
-          title={TITLES[dest]}
-          subtitle="Admin console"
-          actions={
-            <>
-              <ReadinessChip onClick={() => { setDest("controls"); setTimeout(() => document.getElementById("demo-readiness")?.scrollIntoView({ block: "start" }), 0); }} />
-              <ThemeToggle />
-              <IconButton icon="logout" label="Sign out" onClick={() => { setSession(null); setLocal(null); }} />
-            </>
-          }
-        />
-      }
-    >
-      <div className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 px-4 pb-8 sm:px-6">
+    <MotionConfig reducedMotion="user">
+      <AppFrame nav={nav} active={dest} label="Admin" context="Admin console" maxWidth={dest === "controls" ? 760 : 1120}
+        account={{ name: session.name || "Admin", role: "Signed in", switchLabel: "Sign out", onSwitch: () => { setSession(null); setLocal(null); } }}>
+        <LargeTitle title={page.title} subtitle={page.subtitle} actions={<ReadinessStatus onOpen={openChecklist} />} className="mb-8" />
         {dest === "controls" && (
-          <>
-            <InlineMessage tone="info" live={false}>Changes here affect everyone using the demo right now.</InlineMessage>
-            <ReadinessCard onReset={() => setResetOpen(true)} />
-            <div className="grid items-start gap-4 md:grid-cols-2">
-              <ConfigPanel />
-              <FaultsPanel />
-            </div>
-            <ResetPanel open={resetOpen} onOpenChange={setResetOpen} />
-          </>
+          <div className="space-y-8">
+            <ReadinessGroup onReset={() => setResetOpen(true)} />
+            <ConfigPanel />
+            <FaultsPanel />
+            <div className="pt-4"><ResetPanel open={resetOpen} onOpenChange={setResetOpen} /></div>
+          </div>
         )}
         {dest === "ledger" && <LedgerPanel />}
         {dest === "audit" && <AuditViewer />}
-      </div>
-    </AppShell>
+      </AppFrame>
+    </MotionConfig>
   );
 }
