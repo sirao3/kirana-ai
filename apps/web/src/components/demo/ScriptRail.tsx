@@ -1,8 +1,11 @@
 import { Button, cx, Icon } from "../m3";
-import type { StepView } from "./steps";
+import type { DemoView, StepView } from "./steps";
 
-/** Thin stepper along the top of the cockpit. The current step's hint sits underneath; steps tick themselves. */
-export function ScriptRail({ steps, onOpenLedger }: { steps: StepView[]; onOpenLedger: () => void }) {
+/**
+ * Thin stepper along the top of the cockpit. The current step's hint sits underneath; steps tick themselves.
+ * When the current step happens in the view that is not showing, the hint offers to switch.
+ */
+export function ScriptRail({ steps, onOpenLedger, view, onSwitchView }: { steps: StepView[]; onOpenLedger: () => void; view: DemoView; onSwitchView: (v: DemoView) => void }) {
   const current = steps.find((s) => s.status === "current");
   const allDone = !current;
   return (
@@ -48,6 +51,11 @@ export function ScriptRail({ steps, onOpenLedger }: { steps: StepView[]; onOpenL
           <>
             <span className="type-label-large text-primary">Next:</span>
             <span className="min-w-0 flex-1">{current.hint}{current.detail ? ` (${current.detail})` : ""}</span>
+            {current.view && current.view !== view && (
+              <Button size="sm" variant="tonal" icon={current.view === "stores" ? "storefront" : "person"} onClick={() => onSwitchView(current.view!)}>
+                Go to {current.view === "stores" ? "Stores" : "Customer"}
+              </Button>
+            )}
             {current.key === "ledger" && (
               <Button size="sm" variant="tonal" icon="open_in_new" onClick={onOpenLedger}>Open ledger</Button>
             )}

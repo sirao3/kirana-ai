@@ -224,7 +224,7 @@ export function Checkbox({ checked, onChange, label, disabled, describedBy }: { 
 export function SegmentedButton<T extends string>({ value, onChange, options, label, className }: {
   value: T;
   onChange: (v: T) => void;
-  options: { value: T; label: string; icon?: string }[];
+  options: { value: T; label: string; icon?: string; badge?: number; badgeLabel?: string }[];
   label: string;
   className?: string;
 }) {
@@ -246,6 +246,11 @@ export function SegmentedButton<T extends string>({ value, onChange, options, la
           >
             {sel ? <Icon name="check" size={18} /> : o.icon && <Icon name={o.icon} size={18} />}
             {o.label}
+            {!!o.badge && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 type-label-small text-on-error" aria-label={o.badgeLabel}>
+                {o.badge > 99 ? "99+" : o.badge}
+              </span>
+            )}
           </button>
         );
       })}

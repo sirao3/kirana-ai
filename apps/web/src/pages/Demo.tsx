@@ -1,19 +1,19 @@
 import { useMemo, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useLive } from "../lib/live";
 import { getSession, setSession, type Session } from "../lib/session";
 import { EXPANDED, useMedia } from "../lib/useMedia";
-import { AssistChip, BrandMark, CircularProgress, IconButton, InlineMessage, Menu, StatusLabel, ThemeToggle, TopAppBar, useSnackbar } from "../components/m3";
-import { unlockAudio, useAudioUnlocked } from "../components/merchant/alert";
+import { AssistChip, BrandMark, CircularProgress, IconButton, InlineMessage, Menu, SegmentedButton, StatusLabel, ThemeToggle, TopAppBar, useSnackbar } from "../components/m3";
+import { unlockAudio, useAudioUnlocked, usePendingOfferCount } from "../components/merchant/alert";
 import { StoreTile } from "../components/merchant/StoreDashboard";
 import { setAllOnline, useWallTokens } from "../components/merchant/useWallTokens";
 import { bap } from "../components/shop/bap";
 import { AdminActionDialog, type AdminAction } from "../components/demo/AdminActionDialog";
 import { CustomerPane } from "../components/demo/CustomerPane";
 import { ScriptRail } from "../components/demo/ScriptRail";
-import { deriveSteps } from "../components/demo/steps";
+import { deriveSteps, type DemoView } from "../components/demo/steps";
 
 const DEMO_CUSTOMER = "cust_priya";
 
@@ -45,8 +45,10 @@ function SoundChip() {
 }
 
 /**
- * /demo: the presenter cockpit (UX-06). The whole PRD §14 script on one screen: the customer on the left, the five
- * stores on the right, and a script rail that ticks itself from live state. Expanded windows only.
+ * /demo: the presenter cockpit (UX-06). The whole PRD §14 script in one tab: a script rail that ticks itself from live
+ * state, and either the customer's app or the five stores, picked with the switch at the top right (`?view=stores`),
+ * so the audience sees what each real user sees. Both views stay mounted: store tiles keep polling and beeping while
+ * the customer view shows, and the Stores button counts pending offers. Expanded windows only.
  *
  * Tokens: the customer pane uses this tab's customer session (set on entry). Each store tile gets its own merchant
  * token explicitly (`useStore(storeId, token)`), and admin actions ask for the passcode and pass the admin token
@@ -63,6 +65,10 @@ export function Demo() {
   const [resetDone, setResetDone] = useState(false);
   const [ledgerOpened, setLedgerOpened] = useState(false);
   const [baseline, setBaseline] = useState<Set<string> | null>(null);
+  const [params, setParams] = useSearchParams();
+  const view: DemoView = params.get("view") === "stores" ? "stores" : "customer";
+  const setView = (v: DemoView) => setParams(v === "stores" ? { view: v } : {}, { replace: true });
+  const pendingOffers = usePendingOfferCount();
 
   const orders = useLive(["demo-orders"], bap.orders, { enabled: ready });
   const basket = useLive(["basket"], bap.basket, { enabled: ready });
@@ -117,9 +123,19 @@ export function Demo() {
       <TopAppBar
         leading={<BrandMark />}
         title="Demo cockpit"
-        subtitle="Customer, five stores and the script on one screen"
+        subtitle={view === "customer" ? "What Priya sees on her phone" : "What the five kirana owners see"}
         actions={
           <>
+            <SegmentedButton
+              label="Show"
+              value={view}
+              onChange={setView}
+              className="mr-2"
+              options={[
+                { value: "customer", label: "Customer", icon: "person" },
+                { value: "stores", label: "Stores", icon: "storefront", badge: pendingOffers, badgeLabel: `${pendingOffers} pending ${pendingOffers === 1 ? "offer" : "offers"}` },
+              ]}
+            />
             <SoundChip />
             <ThemeToggle />
             <Menu
@@ -134,10 +150,10 @@ export function Demo() {
           </>
         }
       />
-      <ScriptRail steps={steps} onOpenLedger={openLedger} />
+      <ScriptRail steps={steps} onOpenLedger={openLedger} view={view} onSwitchView={setView} />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(420px,4fr)_minmax(0,7fr)] gap-4 px-4 pb-4 pt-2 sm:px-6">
-        <section aria-label="Customer" className="flex min-h-0 flex-col overflow-hidden rounded-xl bg-surface-container-lowest ring-1 ring-outline-variant">
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2 sm:px-6">
+        <section aria-label="Customer" hidden={view !== "customer"} className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-xl bg-surface-container-lowest ring-1 ring-outline-variant">
           {failed ? (
             <InlineMessage tone="error" className="m-4">Could not sign in as the demo customer. Is the server running?</InlineMessage>
           ) : !ready ? (
@@ -147,7 +163,7 @@ export function Demo() {
           )}
         </section>
 
-        <section aria-label="Stores" className="min-h-0 overflow-y-auto pr-1">
+        <section aria-label="Stores" hidden={view !== "stores"} className="min-h-0 flex-1 overflow-y-auto pr-1">
           {stores.isError && <InlineMessage tone="error">Could not load the stores.</InlineMessage>}
           {stores.isLoading && <div className="flex items-center gap-3 py-8 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading stores…</div>}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(268px,1fr))] items-start gap-3">

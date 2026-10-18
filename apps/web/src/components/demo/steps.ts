@@ -3,6 +3,8 @@ import type { BasketView, OrderView, SubOrderStatus } from "@kiranaai/shared";
 /** The PRD §14 script as a stepper. Every step ticks itself from live state; nothing is clicked to advance. */
 export type StepKey = "reset" | "ask" | "pay" | "answer" | "deliver" | "settle" | "ledger";
 export type StepStatus = "done" | "current" | "todo";
+/** The cockpit shows one app at a time: the customer's or the stores'. */
+export type DemoView = "customer" | "stores";
 
 export interface StepView {
   key: StepKey;
@@ -12,6 +14,8 @@ export interface StepView {
   hint: string;
   /** Live progress, e.g. "2/3 accepted · 1 rejected". */
   detail?: string;
+  /** The view this step is done in, if any; the rail offers to switch when the other one is showing. */
+  view?: DemoView;
 }
 
 export interface DemoState {
@@ -102,6 +106,7 @@ export function deriveSteps(st: DemoState): StepView[] {
     settle: "Settled",
     ledger: "Ledger",
   };
+  const views: Partial<Record<StepKey, DemoView>> = { ask: "customer", pay: "customer", answer: "stores", deliver: "stores" };
   let currentTaken = false;
   return sequence.map((key) => {
     let status: StepStatus = "todo";
@@ -110,6 +115,6 @@ export function deriveSteps(st: DemoState): StepView[] {
       status = "current";
       currentTaken = true;
     }
-    return { key, label: labels[key], status, hint: hint[key], detail: detail[key] };
+    return { key, label: labels[key], status, hint: hint[key], detail: detail[key], view: views[key] };
   });
 }
