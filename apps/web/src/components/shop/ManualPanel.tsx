@@ -170,7 +170,7 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
               "aria-autocomplete": "list",
               "aria-activedescendant": open && active >= 0 ? `${listboxId}-${active}` : undefined,
               autoComplete: "off",
-              onFocus: () => setFocused(true),
+              onFocus: () => { setFocused(true); setDismissed(false); },
               onBlur: () => setFocused(false),
               onKeyDown: onSearchKey,
             }}

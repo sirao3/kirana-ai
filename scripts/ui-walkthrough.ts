@@ -144,7 +144,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await shot(c, "address-sheet-far", true);
   await c.getByRole("button", { name: "Done", exact: true }).click();
   await c.getByRole("tab", { name: /Search & plan/ }).click();
-  await c.getByRole("searchbox", { name: "Search products" }).fill("atta");
+  await c.getByRole("combobox", { name: "Search products" }).fill("atta");
   await c.keyboard.press("Enter");
   await c.getByText("Doesn't deliver to you").first().waitFor();
   await settle(c, 500);
