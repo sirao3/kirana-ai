@@ -5,6 +5,7 @@ import {
   AccountMenu, AppShell, Button, Card, CircularProgress, EmptyState, Icon, InlineMessage, ThemeToggle, TopAppBar, useSnackbar, type NavItem,
 } from "../components/m3";
 import { Catalogue } from "../components/merchant/Catalogue";
+import { Earnings } from "../components/merchant/Earnings";
 import { StoreChooser } from "../components/merchant/StoreChooser";
 import { FaultLabels, LiveBoard, OnlineSwitch, StoreError } from "../components/merchant/StoreDashboard";
 import { useStore } from "../components/merchant/useStore";
@@ -12,7 +13,7 @@ import { AudioBanner } from "../components/merchant/AudioBanner";
 import { OfferTakeover } from "../components/merchant/OfferTakeover";
 import { useMedia } from "../lib/useMedia";
 
-type Dest = "live" | "delivered" | "catalogue";
+type Dest = "live" | "delivered" | "earnings" | "catalogue";
 
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const s = useStore(session.sub, session.token);
@@ -35,6 +36,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const nav: NavItem[] = [
     { key: "live", label: "Live", icon: "bolt", onSelect: () => setDest("live"), badge: s.pendingCount },
     { key: "delivered", label: "Delivered", icon: "task_alt", onSelect: () => setDest("delivered") },
+    { key: "earnings", label: "Earnings", icon: "account_balance_wallet", onSelect: () => setDest("earnings") },
     { key: "catalogue", label: "Catalogue", icon: "inventory_2", onSelect: () => setDest("catalogue") },
   ];
 
@@ -114,6 +116,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
                   </ul>
                 </Card>
               ))}
+            {dest === "earnings" && <Earnings storeId={session.sub} token={session.token} />}
             {dest === "catalogue" && <Catalogue storeId={session.sub} token={session.token} />}
           </>
         )}

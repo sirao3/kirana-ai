@@ -180,6 +180,15 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await settle(a, 600);
   await shot(a, "admin-audit");
 
+  // 7. Merchant Earnings (UX-11): deliver the order, then open the tab.
+  for (const step of ["Mark ready", "Out for delivery", "Mark delivered"]) {
+    await m.getByRole("button", { name: step }).click();
+    await settle(m, 600);
+  }
+  await m.locator('nav[aria-label="Store"]:visible').getByText("Earnings").click();
+  await settle(m, 1500);
+  await shot(m, "merchant-earnings");
+
   for (const p of [c, m, w, a]) await p.context().close();
   console.log(`  ${tag}: ${n} screenshots`);
 }

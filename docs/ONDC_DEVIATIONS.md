@@ -31,6 +31,11 @@ contract v1.2.x (`ONDC:RET10`, `core_version` 1.2.0) for the fields we use; see
 | `select` item / `on_select` breakup item | `seen_price` / `price_changed`, `previous_price` | Price-change highlighting (CHK-02). |
 | `confirm` order / `on_confirm` order | `offer_window_seconds` / `expires_at` | Timed offers (DSP-01). |
 
+## Merchant earnings read (UX-11)
+`GET /bpp/merchant/:storeId/ledger` is served by the BPP module but reads `bap.ledger_entry` directly from the shared
+Postgres (the ledger is BAP-owned; there is no Beckn message for settlement reports, RSF is not implemented). It is
+scoped by the merchant token like the other `/bpp/merchant` routes. Same pattern as the admin ledger.
+
 ## Not implemented
 Signing and auth headers, `/subscribe`, ONDC log verification, IGM, RSF, `update`, rating,
 support, real payments (simulated), GST invoicing.
