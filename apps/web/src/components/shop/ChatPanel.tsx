@@ -58,7 +58,7 @@ export function eventChip(e: AgentEvent): { tone: "good" | "info" | "warn"; text
   }
 }
 
-const TOOL_LABEL: Record<string, string> = {
+export const TOOL_LABEL: Record<string, string> = {
   search_products: "Searched stores",
   plan_basket: "Compared stores",
   set_basket: "Built basket",
