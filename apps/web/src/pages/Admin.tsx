@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AuditViewer, LedgerPanel } from "../components/admin/LedgerAudit";
+import { ReadinessCard, ReadinessChip } from "../components/admin/Readiness";
 import { ConfigPanel, FaultsPanel, ResetPanel } from "../components/admin/ControlPanels";
 import { AppShell, BrandMark, Button, Card, Icon, IconButton, InlineMessage, TextField, ThemeToggle, TopAppBar, type NavItem } from "../components/m3";
 import { api, ApiError } from "../lib/api";
@@ -64,6 +65,7 @@ export function Admin() {
     return s?.role === "admin" ? s : null;
   });
   const [dest, setDest] = useState<Dest>("controls");
+  const [resetOpen, setResetOpen] = useState(false);
   if (!session) return <Gate onAuthed={setLocal} />;
   const nav: NavItem[] = [
     { key: "controls", label: "Controls", icon: "tune", onSelect: () => setDest("controls") },
@@ -82,6 +84,7 @@ export function Admin() {
           subtitle="Admin console"
           actions={
             <>
+              <ReadinessChip onClick={() => { setDest("controls"); setTimeout(() => document.getElementById("demo-readiness")?.scrollIntoView({ block: "start" }), 0); }} />
               <ThemeToggle />
               <IconButton icon="logout" label="Sign out" onClick={() => { setSession(null); setLocal(null); }} />
             </>
@@ -93,11 +96,12 @@ export function Admin() {
         {dest === "controls" && (
           <>
             <InlineMessage tone="info" live={false}>Changes here affect everyone using the demo right now.</InlineMessage>
+            <ReadinessCard onReset={() => setResetOpen(true)} />
             <div className="grid items-start gap-4 md:grid-cols-2">
               <ConfigPanel />
               <FaultsPanel />
             </div>
-            <ResetPanel />
+            <ResetPanel open={resetOpen} onOpenChange={setResetOpen} />
           </>
         )}
         {dest === "ledger" && <LedgerPanel />}

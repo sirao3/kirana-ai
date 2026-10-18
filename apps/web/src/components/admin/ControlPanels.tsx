@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { paiseToRupees, rupeesToPaise } from "@kiranaai/shared";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";
-import { Button, Card, CircularProgress, Dialog, InlineMessage, SectionHeader, StatusLabel, Switch, TextField, useSnackbar } from "../m3";
+import { Button, Card, CircularProgress, Dialog, FilterChip, InlineMessage, SectionHeader, StatusLabel, Switch, TextField, useSnackbar } from "../m3";
 
 export interface AdminConfig {
   offerWindowSeconds: number;
@@ -21,10 +21,12 @@ interface Fault {
 const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Request failed");
 
 /** Reset & reseed: a destructive action, so it sits in its own danger section and asks for confirmation in a dialog. */
-export function ResetPanel() {
+export function ResetPanel({ open, onOpenChange }: { open?: boolean; onOpenChange?: (open: boolean) => void } = {}) {
   const qc = useQueryClient();
   const snack = useSnackbar();
-  const [confirming, setConfirming] = useState(false);
+  const [own, setOwn] = useState(false);
+  const confirming = open ?? own;
+  const setConfirming = (v: boolean) => (onOpenChange ? onOpenChange(v) : setOwn(v));
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function reset() {
@@ -137,7 +139,16 @@ export function ConfigPanel() {
         }}
       >
         <div className="grid gap-3 sm:grid-cols-3">
-          <TextField label="Offer window" suffix="s" inputMode="numeric" value={win} onValueChange={(v) => setDraft({ ...draft, window: v })} error={draft.window !== undefined ? winErr : null} supportingText="Time a store has to answer" />
+          <div className="space-y-2">
+            <TextField label="Offer window" suffix="s" inputMode="numeric" value={win} onValueChange={(v) => setDraft({ ...draft, window: v })} error={draft.window !== undefined ? winErr : null} supportingText="Time a store has to answer" />
+            <div role="group" aria-label="Offer window presets" className="flex flex-wrap gap-2">
+              {[5, 45, 120].map((n) => (
+                <FilterChip key={n} selected={c.offerWindowSeconds === n && draft.window === undefined} onClick={() => void patch({ offerWindowSeconds: n }, `Offer window set to ${n} s for the next orders.`).then((ok) => ok && setDraft(({ window: _w, ...rest }) => rest))}>
+                  {n} s
+                </FilterChip>
+              ))}
+            </div>
+          </div>
           <TextField label="Platform fee per basket" prefix="₹" inputMode="decimal" value={fee} onValueChange={(v) => setDraft({ ...draft, fee: v })} error={draft.fee !== undefined ? feeErr : null} />
           <TextField label="Merchant commission" suffix="%" inputMode="decimal" value={pct} onValueChange={(v) => setDraft({ ...draft, pct: v })} error={draft.pct !== undefined ? pctErr : null} />
         </div>
