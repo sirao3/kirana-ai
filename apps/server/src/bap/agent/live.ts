@@ -75,6 +75,7 @@ export function createGeminiLive(opts: {
     let toolsRan = false;
     let toolsRunning = 0;
     let lastActivity = Date.now();
+    let lastInput = 0;
     let session: Session | undefined;
     let settle!: { ok: () => void; fail: (e: Error) => void };
     const finished = new Promise<void>((ok, fail) => (settle = { ok, fail }));
@@ -94,11 +95,13 @@ export function createGeminiLive(opts: {
       const sc = m.serverContent;
       if (opts.debug) {
         const kinds = [m.setupComplete && "setup", sc?.inputTranscription?.text && "in", sc?.outputTranscription?.text && "out", sc?.modelTurn && "modelTurn", m.toolCall && `toolCall(${m.toolCall.functionCalls?.map((c) => c.name).join(",")})`, m.toolCallCancellation && "toolCancel", sc?.generationComplete && "genComplete", sc?.turnComplete && "turnComplete", sc?.interrupted && "interrupted", m.goAway && "goAway"].filter(Boolean);
+        if (sc?.inputTranscription) log(((Date.now() - t0) / 1000).toFixed(2), "in:", JSON.stringify(sc.inputTranscription));
         if (kinds.some((k) => k !== "in" && k !== "out" && k !== "modelTurn")) log(((Date.now() - t0) / 1000).toFixed(2), kinds.join(" "), `said=${said.at(-1)!.length + (sc?.outputTranscription?.text?.length ?? 0)}`);
       }
       if (m.setupComplete) ready();
       if (sc?.inputTranscription?.text) {
         transcript += sc.inputTranscription.text;
+        lastInput = Date.now();
         onTranscript?.(transcript.trim());
       }
       if (sc?.outputTranscription?.text) said[said.length - 1] += sc.outputTranscription.text;
@@ -117,7 +120,12 @@ export function createGeminiLive(opts: {
       }
       // The reply text is complete at generationComplete; turnComplete only follows once the spoken audio has streamed
       // (~10 s for a 3-sentence reply, measured 18 Oct). We drop the audio, so finish early (grace for late transcript pieces).
-      if (sc?.generationComplete && !toolThisTurn && !m.toolCall) setTimeout(() => end(), 300);
+      if (sc?.generationComplete && !toolThisTurn && !m.toolCall) {
+        // The input transcript can still be trickling in (seen on Cloud Run): wait until it has been quiet for 1.2 s, at most 3 s.
+        const replyAt = Date.now();
+        const check = () => (Date.now() - lastInput >= 1200 || Date.now() - replyAt >= 3000 ? end() : setTimeout(check, 100));
+        setTimeout(check, 300);
+      }
       if (sc?.turnComplete) {
         said.push("");
         // A turn that ended in a tool call continues once the tool response is sent.
