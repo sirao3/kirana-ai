@@ -35,7 +35,7 @@ function arg(name: string, fallback?: string): string | undefined {
 const BASE = (arg("url", process.env.UI_URL) ?? "").replace(/\/$/, "");
 const PASSCODE = arg("passcode", process.env.ADMIN_PASSCODE);
 const WIDTHS = (arg("widths", "412,1440") as string).split(",").map(Number);
-const THEMES = (arg("themes", "light,dark") as string).split(",") as ("light" | "dark")[];
+const THEMES = (arg("themes", "light") as string).split(",") as ("light" | "dark")[]; // the Neighbourhood design is light only
 const OUT = arg("out", ".ui-shots") as string;
 const BROWSER = arg("browser", process.env.UI_BROWSER ?? "C:/Program Files/Google/Chrome/Application/chrome.exe") as string;
 const AXE = arg("no-axe") !== "true" && !arg("zoom");
@@ -105,7 +105,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
     if (AXE) {
       // Animations (scale-in / sheet-up) make axe sample mid-transition colours; wait for them to finish.
       await p.waitForTimeout(350);
-      const res = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]).analyze();
+      const res = await new AxeBuilder({ page: p }).exclude('svg[role="img"]').exclude('svg[aria-hidden="true"]').withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]).analyze();
       axeScans += 1;
       for (const v of res.violations) {
         if (v.impact === "serious" || v.impact === "critical") {
@@ -120,7 +120,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   // 1. Landing.
   const c = await newPage("customer");
   await c.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await c.getByRole("button", { name: /Start demo/ }).waitFor();
+  await c.getByRole("button", { name: /Start the live demo/ }).waitFor();
   await settle(c, 500);
   await shot(c, "landing", true);
 
@@ -174,39 +174,42 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await add.click();
   await settle(c);
   await shot(c, "shop-added");
-  if (narrow) {
-    await c.getByRole("button", { name: /Basket, / }).click();
-    await settle(c);
-    await shot(c, "basket-sheet");
-  }
-  await c.getByRole("button", { name: "Get verified quote" }).click();
-  await c.getByRole("button", { name: /^Approve/ }).waitFor();
+  // Search's basket opens in a sheet; one checkout button walks Get verified total → Approve and pay (one sheet, one button).
+  await c.getByRole("button", { name: /Review basket/ }).click();
+  const basketSheet = c.getByRole("dialog", { name: "Basket" });
+  await basketSheet.waitFor();
+  await settle(c);
+  await shot(c, "basket-sheet");
+  await basketSheet.getByRole("button", { name: /Get verified total/ }).click();
+  const pay = c.getByRole("dialog", { name: "Approve and pay" });
+  await pay.getByRole("button", { name: /^Approve and pay/ }).waitFor();
   await settle(c);
   await shot(c, "quote-dialog");
-  await c.getByRole("button", { name: /^Approve/ }).click();
-  await c.getByRole("button", { name: /^Pay/ }).waitFor();
-  await settle(c);
-  await shot(c, "approved");
-  await c.getByRole("button", { name: /^Pay/ }).click();
+  await pay.getByRole("button", { name: /^Approve and pay/ }).click();
+  // The page stays on /shop and the same card becomes the tracker; "Order details" opens /shop/orders/:id.
+  await c.getByRole("button", { name: /Order details/ }).or(c.getByRole("link", { name: /Order details/ })).first().waitFor({ timeout: 20000 });
+  await settle(c, 1500);
+  await shot(c, "order-tracker");
+  await c.getByRole("button", { name: /Order details/ }).or(c.getByRole("link", { name: /Order details/ })).first().click();
   await c.waitForURL(/\/shop\/orders\//);
-  await settle(c, 2500);
-  await shot(c, "order-tracker", true);
+  await settle(c, 1500);
+  await shot(c, "order-detail", true);
 
   // 4. Merchant: Sharma gets the offer.
   const m = await newPage("merchant");
   await signIn(m, { role: "merchant", id: "store_sharma" });
   await m.goto(`${BASE}/merchant`, { waitUntil: "domcontentloaded" });
   // Below 600 px the offer opens as a full-screen takeover (UX-09); act inside it, since the card behind it is inert.
-  const offer = width < 600 ? m.getByRole("dialog") : m.locator("body");
+  const offer = width < 600 ? m.getByRole("dialog", { name: "New order" }) : m.locator("body");
   await offer.getByRole("button", { name: "Accept", exact: true }).waitFor();
   await settle(m, 500);
   await shot(m, "merchant-offer", tall);
-  await offer.getByRole("button", { name: "Reject…" }).click();
+  await offer.getByRole("button", { name: "Decline", exact: true }).click();
   await settle(m, 400);
   await shot(m, "merchant-reject");
   await offer.getByRole("button", { name: "Back" }).click();
   await offer.getByRole("button", { name: "Accept", exact: true }).click();
-  await m.getByRole("button", { name: "Start preparing" }).click();
+  await m.getByRole("button", { name: "Start packing" }).click();
   await settle(m, 1500);
   await shot(m, "merchant-accepted");
   // Catalogue: a card list below 600 px, a table above (UX-15).

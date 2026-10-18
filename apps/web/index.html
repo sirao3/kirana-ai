@@ -4,45 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="KiranaAI: agentic commerce for kirana stores on Beckn/ONDC." />
-    <meta name="theme-color" content="#f8fbf0" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#11140f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F3F1EC" media="(prefers-color-scheme: light)" />
+    
     <title>KiranaAI</title>
-    <script>
-      // Apply the saved/system theme before first paint (no light flash in dark mode).
-      (function () {
-        var m = null;
-        try { m = localStorage.getItem("kiranaai.theme"); } catch (e) {}
-        var dark = m === "dark" || (m !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.dataset.theme = dark ? "dark" : "light";
-      })();
-    </script>
     <style>
-      /* Critical-path skeleton: paints before JS. Colours mirror the M3 tokens in src/index.css. */
-      html { --s: #f8fbf0; --sc: #ecefe5; --pc: #c1efaf; }
-      html[data-theme="dark"] { --s: #11140f; --sc: #1d211b; --pc: #294f20; }
-      body { margin: 0; background: var(--s); }
-      #boot { min-height: 100vh; background: var(--s); }
-      #boot .bar { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
-      #boot .dot { width: 40px; height: 40px; border-radius: 12px; background: var(--pc); }
-      #boot .line { height: 14px; width: 110px; border-radius: 7px; background: var(--sc); }
-      #boot .hero { margin: 8px 16px 0; height: 320px; max-width: 1168px; border-radius: 28px; background: var(--pc); }
-      #boot .cards { display: grid; gap: 16px; margin: 40px 16px 0; max-width: 1168px; }
-      #boot .card { height: 140px; border-radius: 12px; background: var(--sc); }
-      @media (min-width: 768px) { #boot .cards { grid-template-columns: repeat(3, 1fr); } #boot .hero { height: 360px; } }
-      @media (min-width: 1232px) { #boot .hero, #boot .cards { margin-left: auto; margin-right: auto; } }
+      /* Critical-path skeleton: paints before JS. Mirrors the landing page: map-coloured stage + the floating card. */
+      body { margin: 0; background: #F3F1EC; }
+      #boot { min-height: 100vh; background: #F3F1EC; }
+      #boot .card { position: absolute; left: 12px; right: 12px; top: 40vh; bottom: 12px; border-radius: 26px; background: rgba(255,255,255,0.86); box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06), 0 18px 50px rgba(0,0,0,0.14); }
+      #boot .line { height: 14px; border-radius: 7px; background: #ECEAE6; margin: 24px 24px 0; }
+      #boot .line.big { height: 36px; margin-top: 40px; width: 70%; }
+      #boot .line.btn { height: 54px; border-radius: 16px; background: #1D1D1F; margin-top: 28px; }
+      @media (min-width: 840px) { #boot .card { left: 16px; right: auto; top: 16px; bottom: 16px; width: 420px; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,100..151,300..800&family=Roboto+Mono:wght@400;500&display=swap" />
-    <!-- Material Symbols subset: keep icon_names sorted and in sync with the icons used in src/. -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=account_balance,account_balance_wallet,add,admin_panel_settings,arrow_back,arrow_drop_down,arrow_forward,attach_file,auto_awesome,auto_fix_high,block,bolt,brightness_auto,build,cancel,chat,check,check_circle,chevron_right,close,cloud_done,cloud_off,currency_exchange,dark_mode,delete,delete_forever,description,done_all,download,edit_square,error,expand_less,expand_more,fact_check,filter_list,grid_view,history,hourglass_empty,hourglass_top,hub,info,inventory_2,keyboard,light_mode,lightbulb,local_shipping,location_on,lock,login,logout,manage_search,mic,mic_off,monitoring,more_vert,near_me,north_east,notifications_active,open_in_new,payments,percent,person,phone_disabled,play_arrow,playlist_add,print,receipt_long,refresh,remove,restart_alt,route,save,savings,scale,schedule,search,search_off,sell,send,share,shield,shopping_bag,shopping_basket,south_west,storefront,swap_horiz,switch_account,sync,sync_alt,tag,task_alt,thumb_up,timer,timer_off,touch_app,travel_explore,trending_flat,tune,two_wheeler,upload_file,verified,visibility,visibility_off,volume_off,volume_up,volunteer_activism,warning&display=block" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" />
   </head>
   <body>
     <div id="root">
       <div id="boot" aria-hidden="true">
-        <div class="bar"><span class="dot"></span><span class="line"></span></div>
-        <div class="hero"></div>
-        <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        <div class="card"><div class="line" style="width: 30%"></div><div class="line big"></div><div class="line"></div><div class="line btn"></div></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

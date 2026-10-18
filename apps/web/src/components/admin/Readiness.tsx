@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";
-import { Button, Card, Icon, SectionHeader, StatusLabel, useSnackbar } from "../m3";
-import type { AdminConfig } from "./ControlPanels";
+import { useSnackbar } from "../ui/toast";
+import { Button, C, CheckDraw, Group, IWarning, Notice, Row, Skeleton, StatusText } from "../ui";
+import { HIT, type AdminConfig } from "./ControlPanels";
 
 interface Fault {
   storeId: string;
@@ -94,24 +95,21 @@ export function useReadiness() {
   return { rows, issues: rows.filter((r) => !r.ok).length, loading, error };
 }
 
-/** Warning label for the admin top bar while anything is off. Renders nothing when ready. */
-export function ReadinessChip({ onClick }: { onClick: () => void }) {
-  const { issues } = useReadiness();
-  if (issues === 0) return null;
+/** Small readiness status for the page header: "Ready for the demo" or "2 demo issues" (opens the checklist). */
+export function ReadinessStatus({ onOpen }: { onOpen: () => void }) {
+  const { issues, loading } = useReadiness();
+  if (loading) return null;
+  if (issues === 0) return <span className="inline-flex min-h-11 items-center"><StatusText tone="good">Ready for the demo</StatusText></span>;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      aria-label={`${issues} demo readiness ${issues === 1 ? "issue" : "issues"}. Open the checklist`}
-    >
-      <StatusLabel tone="warning" icon="warning">{issues === 1 ? "1 demo issue" : `${issues} demo issues`}</StatusLabel>
+    <button type="button" onClick={onOpen} className="-mx-2 inline-flex min-h-11 cursor-pointer items-center rounded-[10px] px-2 hover:bg-black/[0.04]"
+      aria-label={`${issues} demo readiness ${issues === 1 ? "issue" : "issues"}. Open the checklist`}>
+      <StatusText tone="warn">{issues === 1 ? "1 demo issue" : `${issues} demo issues`}</StatusText>
     </button>
   );
 }
 
-/** "Demo readiness" checklist with one-click fixes. `onReset` opens the reset confirmation. */
-export function ReadinessCard({ onReset }: { onReset: () => void }) {
+/** "Demo readiness" checklist: a drawn check per passing row, a warning and its one-click fix per failing row. */
+export function ReadinessGroup({ onReset }: { onReset: () => void }) {
   const { rows, issues, loading, error } = useReadiness();
   const snack = useSnackbar();
   const [busy, setBusy] = useState<string | null>(null);
@@ -130,28 +128,33 @@ export function ReadinessCard({ onReset }: { onReset: () => void }) {
   }
 
   return (
-    <Card variant="outlined" className="p-4 sm:p-6" id="demo-readiness">
-      <SectionHeader
+    <div id="demo-readiness" className="scroll-mt-6">
+      <Group
         title="Demo readiness"
-        subtitle={loading ? "Checking…" : issues === 0 ? "Everything is set for the demo." : `${issues} ${issues === 1 ? "thing needs" : "things need"} attention before you present.`}
-        actions={!loading && <StatusLabel tone={issues === 0 ? "success" : "warning"} icon={issues === 0 ? "check_circle" : "warning"}>{issues === 0 ? "Ready" : "Needs attention"}</StatusLabel>}
-      />
-      {error && <p className="mt-3 type-body-medium text-error" role="alert">Could not read some admin state. Retrying…</p>}
-      <ul className="mt-2 divide-y divide-outline-variant">
-        {rows.map((r) => (
-          <li key={r.key} className="flex min-h-12 flex-wrap items-center gap-3 py-2">
-            <Icon name={r.ok ? "check_circle" : "warning"} filled className={r.ok ? "text-success" : "text-warning"} />
-            <span className="min-w-0 flex-1 type-body-large text-on-surface">
-              <span className="sr-only">{r.ok ? "OK: " : "Needs attention: "}</span>
-              {r.text}
-            </span>
-            {r.fix && (
-              <Button variant="tonal" loading={busy === r.key} disabled={busy !== null} onClick={() => void run(r)}>{r.fix.label}</Button>
-            )}
-            {r.key === "clean" && !r.ok && <Button variant="tonal" onClick={onReset}>Reset…</Button>}
-          </li>
-        ))}
-      </ul>
-    </Card>
+        footer={loading ? "Checking…" : issues === 0 ? "Everything is set for the demo." : `${issues} ${issues === 1 ? "thing needs" : "things need"} attention before you present.`}
+      >
+        {loading
+          ? [0, 1, 2, 3].map((i) => (
+              <li key={i} className="flex min-h-11 items-center gap-3 px-4 [&+li]:border-t-[0.5px]" style={{ borderColor: C.sep }}>
+                <Skeleton className="h-5 w-5 rounded-full" /><Skeleton className="h-4 w-48" />
+              </li>
+            ))
+          : rows.map((r) => (
+              <Row
+                key={r.key}
+                leading={r.ok ? <CheckDraw size={20} /> : <span style={{ color: C.orange }}><IWarning size={20} /></span>}
+                title={<><span className="sr-only">{r.ok ? "OK: " : "Needs attention: "}</span>{r.text}</>}
+                trailing={
+                  r.fix ? (
+                    <Button size="sm" variant="secondary" className={HIT} busy={busy === r.key} disabled={busy !== null && busy !== r.key} onClick={() => void run(r)}>{r.fix.label}</Button>
+                  ) : r.key === "clean" && !r.ok ? (
+                    <Button size="sm" variant="secondary" className={HIT} onClick={onReset}>Reset…</Button>
+                  ) : undefined
+                }
+              />
+            ))}
+      </Group>
+      {error && <Notice tone="bad" className="mt-3">Could not read some admin state. Retrying…</Notice>}
+    </div>
   );
 }

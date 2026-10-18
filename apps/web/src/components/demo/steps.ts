@@ -88,7 +88,7 @@ export function deriveSteps(st: DemoState): StepView[] {
     ask: `Ask the assistant: “${DEMO_PROMPT}”`,
     pay: quoted ? "Verified quote ready. Review it, approve, then pay." : "Review the verified total, approve and pay once.",
     answer: "Accept Sharma. Reject Lakshmi (“Out of stock”). Leave Gupta to time out.",
-    deliver: "Advance each store's order to Delivered on its tile.",
+    deliver: "Advance each store's order to Delivered with the button under its pin.",
     settle: "Settlement runs on its own once every store has delivered.",
     ledger: "Open the admin ledger: per-merchant net and the subsidy for the reassigned store.",
   };

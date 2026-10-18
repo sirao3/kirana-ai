@@ -3,7 +3,8 @@ import type { BasketView } from "@kiranaai/shared";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BasketPanel, quoteIsLive } from "./BasketPanel";
+import { BasketPanel, CheckoutButton, quoteIsLive } from "./BasketPanel";
+import type { Checkout } from "./useCheckout";
 import { eventChip, StepList } from "./ChatPanel";
 import { isAgentDown } from "./errors";
 import { ApiError } from "../../lib/api";
@@ -50,22 +51,25 @@ describe("agent progress and basket reasons (static render)", () => {
     );
     expect(html).toContain("Searched stores");
     expect(html).toContain("5 stores · 14 offers");
-    expect(html).toContain("Compared stores in progress");
+    expect(html).toMatch(/Compared stores.*in progress/);
   });
 
-  it("BasketPanel shows reason, Suggested qty, plan reasons and the confirm row", () => {
+  it("BasketPanel shows reason, the suggested marker, plan reasons and the confirm prompt; the CTA confirms first", () => {
     const item = (over: object) => ({ listingId: "l1", storeId: "s1", storeName: "Gupta", canonicalProductId: "c", name: "Atta 10 kg", qty: 2, seenPricePaise: 45000, lineTotalPaise: 90000, ...over });
     const b = basket({
       status: "DRAFT", quote: null, itemCount: 2, planReasons: ["Adding Lakshmi saves ₹38 even after ₹30 delivery"],
       stores: [{ storeId: "s1", storeName: "Gupta", itemsTotalPaise: 180000, items: [item({ reason: "₹12 cheaper than Sharma", qtyInferred: true }), item({ listingId: "l2", name: "Tea", reason: null })] }],
     });
-    const html = wrap(createElement(BasketPanel, { basket: b, onCheckout: () => undefined, checkingOut: false, error: null, quoteErrors: [], confirmQty: true }));
+    const html = wrap(createElement(BasketPanel, { basket: b, now: Date.now(), quoteErrors: [] }));
     expect(html).toContain("₹12 cheaper than Sharma");
-    expect(html.match(/Suggested qty/g)).toHaveLength(1);
+    expect(html.match(/>suggested</g)).toHaveLength(1);
     expect(html).toContain("Adding Lakshmi saves");
     expect(html).toContain("We guessed 1 quantity");
-    expect(html).toContain("Looks right");
-    const none = wrap(createElement(BasketPanel, { basket: b, onCheckout: () => undefined, checkingOut: false, error: null, quoteErrors: [] }));
-    expect(none).not.toContain("Looks right");
+    const checkout = { busy: false, error: null, primary: () => undefined } as unknown as Checkout;
+    expect(wrap(createElement(CheckoutButton, { basket: b, checkout }))).toContain("Quantities look right");
+    const confirmed = basket({ ...b, stores: [{ ...b.stores[0]!, items: b.stores[0]!.items.map((i) => ({ ...i, qtyInferred: false })) }] });
+    const none = wrap(createElement(CheckoutButton, { basket: confirmed, checkout }));
+    expect(none).not.toContain("Quantities look right");
+    expect(none).toContain("Get verified total");
   });
 });
