@@ -288,6 +288,19 @@ export interface AgentReply {
   events: AgentEvent[];
   /** Tool calls made this turn, for the "thinking…" steps. */
   steps: { tool: string; ok: boolean }[];
+  /** Voice turns (UX-12): what the model heard, shown as the user's bubble. */
+  transcript?: string;
+}
+
+// Voice input (UX-12): POST /bap/agent/chat {audio, turnId?} instead of {message}. The turn runs on a Gemini Live model
+// (GEMINI_LIVE_MODEL) with the same tools; the reply carries `transcript`. Audio is raw 16-bit PCM, 16 kHz mono, base64,
+// 0.3–30 s. Errors as for text turns (400 bad_request, 409 agent_busy, 429, 503 agent_unavailable).
+export const VOICE_MIME_TYPE = "audio/pcm;rate=16000";
+export const MAX_VOICE_SECONDS = 30;
+export interface AgentVoiceAudio {
+  mimeType: typeof VOICE_MIME_TYPE;
+  /** base64 of little-endian Int16 samples. */
+  data: string;
 }
 
 // Live progress (UX-01): POST /bap/agent/chat accepts an optional `turnId` (8-64 chars of [A-Za-z0-9_-]);

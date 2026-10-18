@@ -1,4 +1,5 @@
 import type {
+  AgentVoiceAudio,
   AddressView,
   AgentHistoryMessage,
   AgentReply,
@@ -45,6 +46,9 @@ export const bap = {
   orders: () => api<OrderView[]>("/bap/orders"),
   chat: (message: string, turnId?: string) =>
     api<AgentReply>("/bap/agent/chat", { method: "POST", json: { message, ...(turnId ? { turnId } : {}) }, signal: AbortSignal.timeout(30_000) }),
+  /** Voice turn (UX-12) on the Gemini Live model; the reply carries `transcript`. Live rounds are slower, so a longer timeout. */
+  chatVoice: (audio: AgentVoiceAudio, turnId?: string) =>
+    api<AgentReply>("/bap/agent/chat", { method: "POST", json: { audio, ...(turnId ? { turnId } : {}) }, signal: AbortSignal.timeout(45_000) }),
   /** Live tool steps of a running agent turn (404 until the server has registered it). */
   turn: (turnId: string) => api<AgentTurnProgress>(`/bap/agent/turns/${encodeURIComponent(turnId)}`),
   chatHistory: () => api<{ messages: AgentHistoryMessage[] }>("/bap/agent/history"),

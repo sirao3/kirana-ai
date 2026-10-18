@@ -222,7 +222,7 @@ Each task lists: **Why** (the gap), **What** (spec), **Where** (files), **API** 
 - **API:** `GET /bpp/merchant/:storeId/ledger` (merchant-token scoped) returning that store's ledger rows. Check LANES.md for where the ledger lives (BAP) and whether the BPP must proxy it. If crossing BAP→BPP is awkward, expose it as `/bap/merchant-ledger/:storeId` with merchant-token auth and note the deviation.
 - **Done when:** after the e2e scenario Balaji's Earnings shows ₹420 net, matching admin.
 
-### UX-12 · Voice input for the assistant (AGT-13) — P1, lane S, 3 h
+### UX-12 · Voice input for the assistant (AGT-13) — P1, lane S, 3 h — **done 18 Oct** (Gemini Live `gemini-3.8-live`, browser records 16 kHz PCM; see CLAUDE.md)
 - **Why:** kirana customers speak Hinglish; voice is the most natural input and a strong demo beat.
 - **What:**
   - Mic icon button in the composer: hold-to-record or tap-to-toggle, recording via `MediaRecorder` (webm/opus).

@@ -15,6 +15,8 @@ const Env = z.object({
   AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  /** Live API model for voice turns (UX-12). WebSocket only; unlimited requests on the AI Studio key, 65K tokens/min. */
+  GEMINI_LIVE_MODEL: z.string().default("gemini-3.8-live"),
   /** Dev only: "1" replaces Gemini with a scripted model (no network). Off by default; never set in production. */
   AGENT_FAKE: z.enum(["0", "1"]).default("0"),
   AGENT_DAILY_CAP: z.coerce.number().int().positive().default(500),

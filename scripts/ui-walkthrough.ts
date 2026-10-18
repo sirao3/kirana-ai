@@ -87,7 +87,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   if (RESET) await resetData();
 
   async function newPage(name: string): Promise<Page> {
-    const ctx = await browser.newContext({ viewport: { width, height: tall ? 860 : 900 }, colorScheme: scheme });
+    const ctx = await browser.newContext({ viewport: { width, height: tall ? 860 : 900 }, colorScheme: scheme, permissions: ["microphone"] });
     if (ZOOM !== 1) await ctx.addInitScript(`new MutationObserver((_, o) => { if (document.documentElement) { document.documentElement.style.setProperty("font-size", "${ZOOM * 100}%", "important"); o.disconnect(); } }).observe(document, { childList: true });`);
     const p = await ctx.newPage();
     p.setDefaultTimeout(20_000);
@@ -130,6 +130,14 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await c.getByRole("tab", { name: /Assistant/ }).waitFor();
   await settle(c);
   await shot(c, "shop-assistant");
+
+  // UX-12: voice input. Start recording (fake mic), show the bar with level meter and timer, then cancel (no agent call).
+  await c.getByRole("button", { name: "Speak your list" }).click();
+  await c.getByRole("group", { name: "Recording a voice message" }).getByText("Listening…").waitFor();
+  await settle(c, 1500);
+  await shot(c, "voice-recording");
+  await c.getByRole("button", { name: "Cancel recording" }).click();
+  await c.getByRole("button", { name: "Speak your list" }).waitFor();
 
   // 2b. UX-14: delivery address sheet, a farther address, and its effect on search; then back to the default address.
   const openAddress = () => c.getByRole("button", { name: /Delivering to/ }).click();
@@ -249,7 +257,8 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
 }
 
 async function main(): Promise<void> {
-const browser = await chromium.launch({ executablePath: BROWSER });
+// Fake mic (a test tone) so the voice step can show the recording bar; nothing is sent to the agent.
+const browser = await chromium.launch({ executablePath: BROWSER, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
 try {
   for (const scheme of THEMES) {
     for (const width of WIDTHS) {

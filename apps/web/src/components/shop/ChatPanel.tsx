@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, AgentReply, AgentTurnStep } from "@kiranaai/shared";
+import { MAX_VOICE_SECONDS, type AgentEvent, type AgentReply, type AgentTurnStep, type AgentVoiceAudio } from "@kiranaai/shared";
 import { ApiError } from "../../lib/api";
 import { formatINR } from "../../lib/format";
-import { AssistChip, Button, CircularProgress, cx, Icon, IconButton, LoadingDots, StatusLabel, SuggestionChip } from "../m3";
+import { AssistChip, Button, CircularProgress, cx, Icon, IconButton, InlineMessage, LoadingDots, StatusLabel, SuggestionChip } from "../m3";
 import { bap } from "./bap";
 import { isAgentDown } from "./errors";
+import { useVoiceRecorder, voiceSupported } from "./voice";
 
 interface Msg {
   id: number;
@@ -15,6 +16,26 @@ interface Msg {
   /** Last polled progress of the turn (carries summaries); preferred over `steps` in the disclosure. */
   liveSteps?: AgentTurnStep[];
   failed?: boolean;
+  /** Voice turn (UX-12): the bubble shows the transcript once the reply arrives. */
+  voice?: { seconds: number; pending: boolean };
+}
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** Five bars that follow the mic level; the middle bars move most. No height transition under reduced motion. */
+function LevelMeter({ level }: { level: number }) {
+  const weights = [0.45, 0.75, 1, 0.75, 0.45];
+  return (
+    <span className="flex h-8 items-center gap-1" aria-hidden>
+      {weights.map((w, i) => (
+        <span
+          key={i}
+          className="w-1.5 rounded-full bg-primary motion-safe:transition-[height] motion-safe:duration-100"
+          style={{ height: `${Math.round(6 + 26 * Math.min(1, level * w * 1.4))}px` }}
+        />
+      ))}
+    </span>
+  );
 }
 
 const EXAMPLES = [
@@ -112,6 +133,9 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
   const idRef = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [canVoice] = useState(voiceSupported);
+  const voice = useVoiceRecorder((audio, seconds) => void sendVoice(audio, seconds));
+  const recording = voice.state === "recording" || voice.state === "starting";
 
   useEffect(() => {
     let alive = true;
@@ -155,21 +179,43 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
     if (!m || thinking) return;
     setText("");
     setMsgs((x) => [...x, { id: idRef.current++, role: "user", text: m }]);
+    await ask((id) => bap.chat(m, id));
+  }
+
+  /** Voice turn: a placeholder bubble ("Voice · 0:07") becomes the transcript when the reply arrives. */
+  async function sendVoice(audio: AgentVoiceAudio, seconds: number) {
+    if (thinking) return;
+    const userId = idRef.current++;
+    setMsgs((x) => [...x, { id: userId, role: "user", text: "", voice: { seconds, pending: true } }]);
+    const r = await ask((id) => bap.chatVoice(audio, id));
+    setMsgs((x) =>
+      x.map((m) => (m.id === userId ? { ...m, text: r?.transcript || (r ? "(could not hear that)" : "Voice message not sent"), voice: { seconds, pending: false } } : m)),
+    );
+  }
+
+  async function stopAndSend() {
+    const out = voice.stop();
+    if (out) await sendVoice(out.audio, out.seconds);
+  }
+
+  async function ask(call: (turnId: string) => Promise<AgentReply>): Promise<AgentReply | null> {
     const id = newTurnId();
     setProgress([]);
     setTurnId(id);
     setThinking(true);
     try {
-      const r = await bap.chat(m, id);
+      const r = await call(id);
       onAgentDown(null);
       // One last read so the disclosure keeps the per-step summaries.
       const final = await bap.turn(id).catch(() => null);
       setMsgs((x) => [...x, { id: idRef.current++, role: "model", text: r.text, events: r.events, steps: r.steps, liveSteps: final && final.steps.length === r.steps.length ? final.steps : undefined }]);
       onEvents(r.events);
+      return r;
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) onAgentDown("rate_limited");
       else if (isAgentDown(e)) onAgentDown("unavailable");
       setMsgs((x) => [...x, { id: idRef.current++, role: "model", failed: true, text: "I could not answer just now. You can keep shopping with Search." }]);
+      return null;
     } finally {
       setThinking(false);
       inputRef.current?.focus();
@@ -207,8 +253,13 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
               m.role === "user" ? (
                 <li key={m.id} className="flex justify-end">
                   <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-xs bg-primary px-4 py-2.5 type-body-large text-on-primary">
-                    <span className="sr-only">You: </span>
-                    {m.text}
+                    <span className="sr-only">You{m.voice ? " (voice)" : ""}: </span>
+                    {m.voice && (
+                      <span className="mb-0.5 flex items-center gap-1 type-label-medium opacity-80">
+                        <Icon name="mic" size={16} /> Voice · {clock(m.voice.seconds)}
+                      </span>
+                    )}
+                    {m.voice?.pending ? <span className="italic opacity-80">Understanding…</span> : m.text}
                   </p>
                 </li>
               ) : (
@@ -265,6 +316,33 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
         <div ref={endRef} />
       </div>
 
+      {(voice.state === "denied" || voice.state === "error") && (
+        <InlineMessage
+          tone={voice.state === "denied" ? "warning" : "error"}
+          icon="mic_off"
+          title={voice.state === "denied" ? "Microphone is blocked" : "Could not start the microphone"}
+          action={<Button variant="text" size="sm" onClick={voice.dismiss}>OK</Button>}
+          className="mb-2"
+        >
+          {voice.state === "denied"
+            ? "Allow the microphone for this site (the icon at the left of the address bar), then tap the mic again. Or type your list."
+            : "Check that a microphone is connected and not used by another app, or type your list."}
+        </InlineMessage>
+      )}
+      {recording ? (
+        <div className="flex items-center gap-2 pb-2 pt-2" role="group" aria-label="Recording a voice message">
+          <div className="flex min-h-14 min-w-0 flex-1 items-center gap-2 rounded-[28px] bg-primary-container pl-1 pr-4 text-on-primary-container">
+            <IconButton icon="close" label="Cancel recording" type="button" onClick={voice.cancel} />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-error motion-safe:animate-breathe" aria-hidden />
+            <span className="min-w-0 flex-1 truncate type-body-large">{voice.state === "starting" ? "Starting mic…" : "Listening…"}</span>
+            <LevelMeter level={voice.level} />
+            <span className="shrink-0 text-right type-label-large tabular-nums" aria-label={`${Math.floor(voice.seconds)} of ${MAX_VOICE_SECONDS} seconds`}>
+              {clock(voice.seconds)} / {clock(MAX_VOICE_SECONDS)}
+            </span>
+          </div>
+          <IconButton icon="send" label="Stop and send voice message" variant="filled" size={48} type="button" disabled={voice.state !== "recording"} onClick={() => void stopAndSend()} autoFocus />
+        </div>
+      ) : (
       <form
         className="flex items-end gap-2 pb-2 pt-2"
         onSubmit={(e) => {
@@ -290,11 +368,13 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
             aria-label="Message the assistant"
           />
           {msgs.length > 0 && <IconButton icon="edit_square" label="New chat" type="button" disabled={thinking} onClick={() => void newChat()} />}
+          {canVoice && <IconButton icon="mic" label="Speak your list" type="button" disabled={thinking} onClick={() => void voice.start()} />}
         </div>
         <IconButton icon="send" label="Send" variant="filled" size={48} type="submit" disabled={thinking || !text.trim()} />
       </form>
+      )}
       <p className="flex flex-wrap items-center gap-x-1 pb-2 type-body-small text-on-surface-variant">
-        The assistant builds your basket; only you can approve and pay.
+        {canVoice ? "Type, or tap the mic and speak in English or Hinglish. " : ""}The assistant builds your basket; only you can approve and pay.
         <Button variant="text" size="sm" className="-ml-1" onClick={onUseManual}>Prefer to search yourself?</Button>
       </p>
     </div>

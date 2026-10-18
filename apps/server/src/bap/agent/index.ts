@@ -1,19 +1,25 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import type { AgentEvent, AgentHistoryMessage, AgentReply } from "@kiranaai/shared";
+import type { FunctionCall, FunctionResponse } from "@google/genai";
+import { MAX_VOICE_SECONDS, type AgentEvent, type AgentHistoryMessage, type AgentReply } from "@kiranaai/shared";
 import { audit } from "../../beckn/audit.js";
 import { requireAuth } from "../../lib/auth.js";
 import { makeToolClient, ToolForbiddenError, type ToolClient } from "./client.js";
 import { createFakeLlm } from "./fake-llm.js";
+import { createGeminiLive, createLiveFromLlm, VOICE_BYTES_PER_SECOND, VOICE_MIME, type LiveAgent } from "./live.js";
 import { createGeminiLlm, type Content, type Llm } from "./llm.js";
 import { SYSTEM_PROMPT } from "./prompt.js";
 import { TURN_ID_RE, TurnProgressStore } from "./progress.js";
 import { MAX_TOOL_CALLS, runTool, summarizeStep, TOOL_DECLARATIONS, type ToolEnv } from "./tools.js";
 
 /** Test seams: inject a fake model / fake loopback fetch / tighter limits. Unset in production. */
-export const agentTestHooks: { llm?: Llm; fetchImpl?: typeof fetch; timeoutMs?: number; maxPerWindow?: number } = {};
+export const agentTestHooks: { llm?: Llm; live?: LiveAgent; fetchImpl?: typeof fetch; timeoutMs?: number; maxPerWindow?: number } = {};
 
 const TURN_TIMEOUT_MS = 20_000;
+/** Voice turns run on a Live model that speaks every reply (audio we drop), so each round takes a few seconds longer. */
+const VOICE_TURN_TIMEOUT_MS = 40_000;
+/** Transcript the scripted dev agent (AGENT_FAKE=1) pretends to have heard. */
+export const FAKE_VOICE_TRANSCRIPT = "Weekly groceries for 4, under 1500 rupees: atta, toor dal, milk, tea.";
 const WINDOW_MS = 10 * 60_000;
 const PER_WINDOW = 20;
 const HISTORY_ROWS = 40;
@@ -21,7 +27,6 @@ const FALLBACK_TEXT = "Sorry, I could not finish that. Please try again or use m
 
 export class AgentTimeoutError extends Error {}
 
-type Part = NonNullable<Content["parts"]>[number];
 const isUserText = (c: Content) => c.role === "user" && !!c.parts?.some((p) => typeof p.text === "string" && p.text.length > 0);
 const textOf = (c: Content) =>
   (c.parts ?? []).filter((p) => !p.thought && typeof p.text === "string").map((p) => p.text as string).join("").trim();
@@ -30,6 +35,49 @@ const textOf = (c: Content) =>
 export function trimHistory(rows: Content[]): Content[] {
   const i = rows.findIndex(isUserText);
   return i < 0 ? [] : rows.slice(i);
+}
+
+type ToolHooks = {
+  onToolStart?: (t: { tool: string }) => number | void;
+  onTool?: (t: { tool: string; args: unknown; ok: boolean; summary: string; stepIndex: number | void }) => void | Promise<void>;
+};
+
+/**
+ * Runs the model's function calls with the allowlisted tools and a per-turn budget (MAX_TOOL_CALLS). Shared by text
+ * turns (runTurn) and voice turns (runVoiceTurn), so both get the same tools, progress steps and audit.
+ */
+export function makeToolExecutor(opts: { env: ToolEnv; steps: AgentReply["steps"]; signal: AbortSignal } & ToolHooks) {
+  let calls = 0;
+  return {
+    get calls() {
+      return calls;
+    },
+    async run(fcs: FunctionCall[]): Promise<FunctionResponse[]> {
+      const out: FunctionResponse[] = [];
+      for (const fc of fcs) {
+        const name = fc.name ?? "";
+        const args = (fc.args ?? {}) as Record<string, unknown>;
+        let run: { ok: boolean; result: unknown };
+        if (calls >= MAX_TOOL_CALLS) {
+          run = { ok: false, result: { error: "tool_budget_exhausted", message: "No more tool calls this turn. Answer the customer with what you have." } };
+        } else {
+          calls++;
+          const stepIndex = opts.onToolStart?.({ tool: name });
+          try {
+            run = await runTool(name, args, opts.env);
+          } catch (err) {
+            if (err instanceof ToolForbiddenError) run = { ok: false, result: { error: "tool_forbidden" } };
+            else if (opts.signal.aborted) throw new AgentTimeoutError();
+            else run = { ok: false, result: { error: "tool_failed", message: err instanceof Error ? err.message : "unknown" } };
+          }
+          opts.steps.push({ tool: name, ok: run.ok });
+          await opts.onTool?.({ tool: name, args, ok: run.ok, summary: summarizeStep(name, run), stepIndex });
+        }
+        out.push({ ...(fc.id ? { id: fc.id } : {}), name, response: run.ok ? { output: run.result } : { error: run.result } });
+      }
+      return out;
+    },
+  };
 }
 
 /**
@@ -42,53 +90,69 @@ export async function runTurn(opts: {
   message: string;
   client: ToolClient;
   signal: AbortSignal;
-  onToolStart?: (t: { tool: string }) => number | void;
-  onTool?: (t: { tool: string; args: unknown; ok: boolean; summary: string; stepIndex: number | void }) => void | Promise<void>;
-}): Promise<{ reply: AgentReply; created: Content[] }> {
+} & ToolHooks): Promise<{ reply: AgentReply; created: Content[] }> {
   const { llm, client, signal } = opts;
   const events: AgentEvent[] = [];
   const steps: AgentReply["steps"] = [];
   const created: Content[] = [{ role: "user", parts: [{ text: opts.message }] }];
-  let calls = 0;
   let text = "";
   const env: ToolEnv = { client, events, userMessage: opts.message };
+  const tools = makeToolExecutor({ env, steps, signal, onToolStart: opts.onToolStart, onTool: opts.onTool });
 
   for (let round = 0; round < MAX_TOOL_CALLS + 2; round++) {
     if (signal.aborted) throw new AgentTimeoutError();
-    const modelContent = await llm.generate({ contents: [...opts.history, ...created], allowTools: calls < MAX_TOOL_CALLS, signal });
+    const modelContent = await llm.generate({ contents: [...opts.history, ...created], allowTools: tools.calls < MAX_TOOL_CALLS, signal });
     created.push(modelContent); // unchanged: Gemini 3 thoughtSignature must survive
-    const fcs = (modelContent.parts ?? []).filter((p): p is Part & { functionCall: NonNullable<Part["functionCall"]> } => !!p.functionCall);
+    const fcs = (modelContent.parts ?? []).flatMap((p) => (p.functionCall ? [p.functionCall] : []));
     if (!fcs.length) {
       text = textOf(modelContent);
       break;
     }
-    const responses: Part[] = [];
-    for (const p of fcs) {
-      const fc = p.functionCall;
-      const name = fc.name ?? "";
-      const args = (fc.args ?? {}) as Record<string, unknown>;
-      let run: { ok: boolean; result: unknown };
-      if (calls >= MAX_TOOL_CALLS) {
-        run = { ok: false, result: { error: "tool_budget_exhausted", message: "No more tool calls this turn. Answer the customer with what you have." } };
-      } else {
-        calls++;
-        const stepIndex = opts.onToolStart?.({ tool: name });
-        try {
-          run = await runTool(name, args, env);
-        } catch (err) {
-          if (err instanceof ToolForbiddenError) run = { ok: false, result: { error: "tool_forbidden" } };
-          else if (signal.aborted) throw new AgentTimeoutError();
-          else run = { ok: false, result: { error: "tool_failed", message: err instanceof Error ? err.message : "unknown" } };
-        }
-        steps.push({ tool: name, ok: run.ok });
-        await opts.onTool?.({ tool: name, args, ok: run.ok, summary: summarizeStep(name, run), stepIndex });
-      }
-      responses.push({ functionResponse: { ...(fc.id ? { id: fc.id } : {}), name, response: run.ok ? { output: run.result } : { error: run.result } } });
-    }
-    created.push({ role: "user", parts: responses });
+    const responses = await tools.run(fcs);
+    created.push({ role: "user", parts: responses.map((r) => ({ functionResponse: r })) });
   }
 
   return { reply: { text: text || FALLBACK_TEXT, events, steps }, created };
+}
+
+/**
+ * One voice turn (UX-12) on a Gemini Live model. Persists only the transcript and the reply text, so later text turns
+ * (Flash Lite) never see Live tool calls without thought signatures.
+ */
+export async function runVoiceTurn(opts: {
+  live: LiveAgent;
+  history: Content[];
+  audio: { mimeType: string; data: string };
+  client: ToolClient;
+  signal: AbortSignal;
+} & ToolHooks): Promise<{ reply: AgentReply; created: Content[] }> {
+  const events: AgentEvent[] = [];
+  const steps: AgentReply["steps"] = [];
+  const env: ToolEnv = { client: opts.client, events, userMessage: "" };
+  const tools = makeToolExecutor({ env, steps, signal: opts.signal, onToolStart: opts.onToolStart, onTool: opts.onTool });
+  const out = await opts.live.run({
+    history: opts.history,
+    audio: opts.audio,
+    signal: opts.signal,
+    onTranscript: (t) => (env.userMessage = t), // quantities are judged "stated" against what the customer said
+    onToolCalls: (fcs) => tools.run(fcs),
+  });
+  const transcript = out.transcript;
+  // No reply text (the Live session went quiet) but tools ran: say what changed, from the events, not a generic failure.
+  const text =
+    out.text ||
+    (events.some((e) => e.type === "approval_requested")
+      ? "Your basket is quoted. Review the total and press Approve, then Pay."
+      : events.length
+        ? "I updated your basket. Check it, then get a verified quote."
+        : transcript
+          ? FALLBACK_TEXT
+          : "Sorry, I could not hear that. Please try again, or type your list.");
+  const created: Content[] = [
+    { role: "user", parts: [{ text: transcript || "(voice message)" }] },
+    { role: "model", parts: [{ text }] },
+  ];
+  return { reply: { text, events, steps, transcript }, created };
 }
 
 /** Gemini shopping agent (/bap/agent/*). Tools call the BAP API over loopback HTTP with an allowlist (no approve/pay). */
@@ -99,6 +163,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   let day = new Date().toISOString().slice(0, 10);
   let dayCount = 0;
   let llm: Llm | null = null;
+  let live: LiveAgent | null = null;
   const progress = new TurnProgressStore();
 
   const getLlm = (): Llm | null => {
@@ -109,9 +174,34 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return llm;
   };
 
-  app.post("/chat", { preHandler: requireAuth("customer") }, async (req, reply) => {
-    const body = z.object({ message: z.string().trim().min(1).max(2000), turnId: z.string().regex(TURN_ID_RE).optional() }).safeParse(req.body);
+  const getLive = (): LiveAgent | null => {
+    if (agentTestHooks.live) return agentTestHooks.live;
+    if (config.AGENT_FAKE === "1") return (live ??= createLiveFromLlm(createFakeLlm(), FAKE_VOICE_TRANSCRIPT));
+    if (!config.GEMINI_API_KEY) return null;
+    live ??= createGeminiLive({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_LIVE_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, debug: process.env.LIVE_DEBUG === "1" });
+    return live;
+  };
+
+  const maxAudioChars = Math.ceil(((MAX_VOICE_SECONDS + 1) * VOICE_BYTES_PER_SECOND * 4) / 3);
+  const chatBody = z
+    .object({
+      message: z.string().trim().min(1).max(2000).optional(),
+      audio: z
+        .object({
+          mimeType: z.literal(VOICE_MIME),
+          // At least ~0.3 s of audio; at most 30 s (plus a little slack for the recorder's last chunk).
+          data: z.string().min(12_800).max(maxAudioChars).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+        })
+        .optional(),
+      turnId: z.string().regex(TURN_ID_RE).optional(),
+    })
+    .refine((b) => !!b.message !== !!b.audio, { message: "send either message or audio" });
+
+  // bodyLimit: 30 s of 16 kHz PCM is ~1.3 MB of base64, over Fastify's 1 MB default.
+  app.post("/chat", { preHandler: requireAuth("customer"), bodyLimit: 2 * 1024 * 1024 }, async (req, reply) => {
+    const body = chatBody.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    const voice = body.data.audio;
     const customerId = req.auth!.sub;
 
     // Rate limit: per IP per 10 min, plus a daily cap for the whole instance.
@@ -128,15 +218,16 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     hits.set(req.ip, recent);
     dayCount++;
 
-    const model = getLlm();
-    if (!model) return reply.code(503).send({ error: "agent_unavailable" });
+    const model = voice ? null : getLlm();
+    const liveAgent = voice ? getLive() : null;
+    if (!model && !liveAgent) return reply.code(503).send({ error: "agent_unavailable" });
     if (inFlight.has(customerId)) return reply.code(409).send({ error: "agent_busy" });
     inFlight.add(customerId);
 
     const turnId = body.data.turnId;
     if (turnId) progress.start(customerId, turnId);
     const ac = new AbortController();
-    const timeoutMs = agentTestHooks.timeoutMs ?? TURN_TIMEOUT_MS;
+    const timeoutMs = agentTestHooks.timeoutMs ?? (voice ? VOICE_TURN_TIMEOUT_MS : TURN_TIMEOUT_MS);
     let timer: NodeJS.Timeout | undefined;
     const deadline = new Promise<never>((_, rej) => {
       timer = setTimeout(() => {
@@ -156,18 +247,16 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         fetchImpl: agentTestHooks.fetchImpl,
         signal: ac.signal,
       });
-      const turn = runTurn({
-        llm: model,
-        history,
-        message: body.data.message,
-        client,
-        signal: ac.signal,
+      const hooks: ToolHooks = {
         onToolStart: turnId ? (t) => progress.beginStep(customerId, turnId, t.tool) : undefined,
         onTool: async (t) => {
           if (turnId && typeof t.stepIndex === "number") progress.finishStep(customerId, turnId, t.stepIndex, { ok: t.ok, summary: t.summary });
-          await audit(pool, { kind: "state", action: "agent.tool", actor: "bap", entityId: customerId, payload: { tool: t.tool, args: t.args, ok: t.ok } });
+          await audit(pool, { kind: "state", action: "agent.tool", actor: "bap", entityId: customerId, payload: { tool: t.tool, args: t.args, ok: t.ok, ...(voice ? { voice: true } : {}) } });
         },
-      });
+      };
+      const turn = voice
+        ? runVoiceTurn({ live: liveAgent!, history, audio: voice, client, signal: ac.signal, ...hooks })
+        : runTurn({ llm: model!, history, message: body.data.message!, client, signal: ac.signal, ...hooks });
       turn.catch(() => undefined); // if the deadline wins, don't leave an unhandled rejection
       const { reply: out, created } = await Promise.race([turn, deadline]);
       // Persist only completed turns, so history never ends with a dangling function call.

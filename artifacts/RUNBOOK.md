@@ -34,6 +34,7 @@ Also try:
 - Search "gehun ka aata" (should find atta) and "250 g jeera" (declined, 100 g pack offered).
 - Tap "Delivering to Indiranagar, Bengaluru" under the Shop title, pick "CV Raman Nagar": Lakshmi and Balaji show "Doesn't deliver to you", search "atta" no longer lists them and the planner skips them. Pick Indiranagar again (or Admin > Reset) to restore the default.
 - Chat "just pay for me" (only the approval card appears) and "where is my order?".
+- Tap the mic in the chat composer and say the weekly list (English or Hinglish, e.g. "chaar logon ke liye hafte ka saaman, pandrah sau ke andar: atta, toor dal, doodh, chai"), then the send button. Your bubble shows what was heard; the same ₹1,400 basket and approval card appear in ~12-17 s. Voice turns run on the Gemini Live model (`GEMINI_LIVE_MODEL`, default `gemini-3.8-live`; unlimited requests on the AI Studio key), so they still work when Flash Lite is out of quota. Needs HTTPS or localhost and mic permission; `LIVE_DEBUG=1` logs the Live message sequence on the server.
 - `/merchant` as one store: catalogue tab, add a product (then search for it), CSV import.
 
 If the chat says the assistant is unavailable, Gemini failed or hit its quota (see section 5);
