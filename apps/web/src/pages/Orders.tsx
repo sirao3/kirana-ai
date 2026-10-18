@@ -9,6 +9,7 @@ import { Button, CircularProgress, cx, EmptyState, Icon, IconButton, InlineMessa
 import { bap } from "../components/shop/bap";
 import { CustomerShell } from "../components/shop/CustomerShell";
 import { errorMessage } from "../components/shop/errors";
+import { orderPriceProtected } from "../components/shop/handoff";
 import { OrderDetail, orderSummary } from "../components/shop/OrderDetail";
 
 function OrderList({ orders, selected }: { orders: OrderView[]; selected?: string }) {
@@ -34,6 +35,7 @@ function OrderList({ orders, selected }: { orders: OrderView[]; selected?: strin
                 <span className="block truncate type-body-medium text-on-surface-variant">
                   {new Date(o.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                 </span>
+                {orderPriceProtected(o) && <StatusLabel tone="success" icon="shield" className="mt-1">Price protected</StatusLabel>}
               </span>
               <StatusLabel tone={s.tone} icon={s.icon}>{s.label}</StatusLabel>
             </Link>

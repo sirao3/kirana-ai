@@ -1,7 +1,16 @@
+import { useState } from "react";
 import type { OrderView, PaymentStatus, SubOrderStatus, SubOrderView } from "@kiranaai/shared";
 import { formatINR, itemsLabel } from "../../lib/format";
-import { Card, Countdown, cx, Icon, InlineMessage, LinearProgress, StatusLabel, type Tone } from "../m3";
+import { useMedia } from "../../lib/useMedia";
+import { Button, Card, Countdown, cx, Icon, InlineMessage, LinearProgress, StatusLabel, type Tone } from "../m3";
+import { HandoffStrip } from "./HandoffStrip";
+import { priceProtection, priceProtectionMessage } from "./handoff";
+import { ReceiptCard } from "./ReceiptCard";
 import { deriveTimeline, type StepState } from "./timeline";
+import { useAttemptAnnouncements } from "./useAttemptAnnouncements";
+
+/** M3 medium window class and up (>=600 px): the full timeline is shown by default. */
+const MEDIUM = "(min-width: 600px)";
 
 export const PAYMENT: Record<PaymentStatus, { tone: Tone; icon: string; label: string }> = {
   NONE: { tone: "neutral", icon: "hourglass_empty", label: "Not paid" },
@@ -44,6 +53,11 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
   const steps = deriveTimeline(sub);
   const store = sub.currentStoreName ?? sub.approvedStoreName;
   const st = SUB[sub.status];
+  const protect = priceProtection(sub);
+  const roomy = useMedia(MEDIUM);
+  const [open, setOpen] = useState(false);
+  const showSteps = roomy || open;
+  const current = steps.find((x) => x.state === "active") ?? [...steps].reverse().find((x) => x.state !== "pending") ?? steps[0]!;
   return (
     <Card variant="outlined" className="overflow-hidden">
       <header className="flex flex-wrap items-center gap-3 px-4 pb-2 pt-4">
@@ -56,6 +70,12 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
         </div>
         <StatusLabel tone={st.tone} icon={st.icon}>{st.label}</StatusLabel>
       </header>
+      <HandoffStrip sub={sub} />
+      {protect && (
+        <div className="px-4 pb-3">
+          <InlineMessage tone="success" icon="shield" live={false}>{priceProtectionMessage(protect)}</InlineMessage>
+        </div>
+      )}
       {st.progress !== undefined && <LinearProgress value={st.progress} label={`${store}: ${st.label}`} className="mx-4 w-auto!" />}
 
       <div className="grid gap-x-8 gap-y-4 p-4 sm:grid-cols-[1fr_1.3fr]">
@@ -68,7 +88,16 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
           ))}
         </ul>
 
-        <ol aria-label="Progress">
+        <div>
+        {!roomy && (
+          <div className="mb-2 flex items-center gap-2">
+            <p className="min-w-0 flex-1 type-body-medium text-on-surface">{!open && <>Now: {current.label}</>}</p>
+            <Button variant="text" icon={open ? "expand_less" : "expand_more"} aria-expanded={open} aria-controls={`steps-${sub.id}`} onClick={() => setOpen((v) => !v)}>
+              {open ? "Hide steps" : "Show all steps"}
+            </Button>
+          </div>
+        )}
+        <ol id={`steps-${sub.id}`} aria-label="Progress" hidden={!showSteps}>
           {steps.map((s, i) => (
             <li key={s.key} className="flex gap-3">
               <div className="flex flex-col items-center">
@@ -89,6 +118,7 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
             </li>
           ))}
         </ol>
+        </div>
       </div>
     </Card>
   );
@@ -97,8 +127,10 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
 /** Customer order detail: payment status (separate from fulfilment) + one live timeline per store. */
 export function OrderDetail({ order: o }: { order: OrderView }) {
   const pay = PAYMENT[o.paymentStatus];
+  const said = useAttemptAnnouncements(o);
   return (
     <div className="space-y-4">
+      <div role="status" aria-live="polite" className="sr-only">{said}</div>
       {o.settled && (
         // Expressive moment: the end of the journey.
         <section role="status" className="flex items-center gap-4 rounded-xl bg-primary-container p-5 text-on-primary-container">
@@ -111,6 +143,8 @@ export function OrderDetail({ order: o }: { order: OrderView }) {
           </div>
         </section>
       )}
+
+      {o.settled && <ReceiptCard order={o} />}
 
       <Card variant="filled" className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">

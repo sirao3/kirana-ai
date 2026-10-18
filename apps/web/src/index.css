@@ -309,3 +309,22 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Print (UX-10): show only the receipt card. */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area {
+    position: absolute !important;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  .print-area * { color: #000 !important; background: transparent !important; }
+  .no-print { display: none !important; }
+}
