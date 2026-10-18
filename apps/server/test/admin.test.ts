@@ -75,6 +75,9 @@ describe("admin API (T15)", () => {
     const gupta = await tokenFor(t.url, { role: "merchant", id: "store_gupta" });
     const dash = await (await fetch(`${t.url}/bpp/merchant/store_gupta/dashboard`, { headers: { authorization: `Bearer ${gupta}` } })).json() as any;
     expect(dash.store.faults).toEqual({ autoReject: true, neverAnswer: true });
+    expect((await call("/faults/store_gupta")).json.isOnline).toBe(true);
+    expect((await call("/faults/store_gupta", "PATCH", { isOnline: false })).json).toMatchObject({ isOnline: false, autoReject: true });
+    expect((await call("/faults/store_gupta", "PATCH", { isOnline: true })).json.isOnline).toBe(true);
     expect((await call("/faults/store_nope")).status).toBe(404);
     expect((await call("/faults/store_nope", "PATCH", { autoReject: true })).status).toBe(404);
     expect((await call("/faults/store_gupta", "PATCH", { autoReject: "x" })).status).toBe(400);

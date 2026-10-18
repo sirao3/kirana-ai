@@ -30,7 +30,7 @@ const ConfigPatch = z
   .refine((b) => Object.keys(b).length > 0, { message: "nothing to update" });
 
 const FaultPatch = z
-  .object({ autoReject: z.boolean(), neverAnswer: z.boolean() })
+  .object({ autoReject: z.boolean(), neverAnswer: z.boolean(), isOnline: z.boolean() })
   .partial()
   .refine((b) => Object.keys(b).length > 0, { message: "nothing to update" });
 
@@ -74,9 +74,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // --- per-store fault injection (bpp.fault) ---
-  type FaultRow = { store_id: string; store_name: string; auto_reject: boolean; never_answer: boolean };
-  const faultDto = (r: FaultRow) => ({ storeId: r.store_id, storeName: r.store_name, autoReject: r.auto_reject, neverAnswer: r.never_answer });
-  const FAULT_SQL = `SELECT s.id AS store_id, s.name AS store_name, COALESCE(f.auto_reject, false) AS auto_reject, COALESCE(f.never_answer, false) AS never_answer
+  type FaultRow = { store_id: string; store_name: string; auto_reject: boolean; never_answer: boolean; is_online: boolean };
+  const faultDto = (r: FaultRow) => ({ storeId: r.store_id, storeName: r.store_name, autoReject: r.auto_reject, neverAnswer: r.never_answer, isOnline: r.is_online });
+  const FAULT_SQL = `SELECT s.id AS store_id, s.name AS store_name, COALESCE(f.auto_reject, false) AS auto_reject, COALESCE(f.never_answer, false) AS never_answer, s.is_online
                        FROM bpp.store s LEFT JOIN bpp.fault f ON f.store_id = s.id`;
 
   app.get("/faults", async () => ({ faults: (await pool.query<FaultRow>(`${FAULT_SQL} ORDER BY s.name`)).rows.map(faultDto) }));
@@ -96,6 +96,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
        ON CONFLICT (store_id) DO UPDATE SET auto_reject = COALESCE($2, bpp.fault.auto_reject), never_answer = COALESCE($3, bpp.fault.never_answer)`,
       [storeId, b.data.autoReject ?? null, b.data.neverAnswer ?? null],
     );
+    if (b.data.isOnline !== undefined) await pool.query("UPDATE bpp.store SET is_online = $2 WHERE id = $1", [storeId, b.data.isOnline]);
     await auditState(pool, "admin", "admin.fault", { storeId, entityId: storeId, payload: b.data });
     const { rows } = await pool.query<FaultRow>(`${FAULT_SQL} WHERE s.id = $1`, [storeId]);
     return faultDto(rows[0]!);
