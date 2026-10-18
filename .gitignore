@@ -7,3 +7,4 @@ dist/
 .DS_Store
 drizzle-draft/
 .claude/worktrees/
+.ui-shots/

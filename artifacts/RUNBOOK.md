@@ -37,6 +37,31 @@ Also try:
 If the chat says the assistant is unavailable, Gemini failed or hit its quota (see section 5);
 manual mode still works.
 
+### UI walkthrough (screenshots)
+
+`pnpm ui` drives the real UI in your installed Chrome or Edge (playwright-core, no browser download)
+and saves screenshots to `.ui-shots/` (git-ignored). It never uses the agent chat, so it costs no Gemini quota.
+
+```bash
+pnpm build                       # then (re)start the server: it indexes apps/web/dist at boot
+pnpm ui --url http://127.0.0.1:8095 --passcode demo
+# flags: --widths 412,1440  --themes light,dark  --out .ui-shots  --browser <chrome.exe|msedge.exe>  --no-reset
+```
+
+- Per width x theme (default 4 runs, 16-17 shots each): landing, shop (Assistant, Search & plan, add Sharma atta,
+  basket sheet below 840 px), verified-quote dialog, approve, pay, tracker, merchant Sharma (offer, Reject...,
+  Accept, Start preparing), wall, admin gate, Controls, Ledger, Audit.
+- It **resets the data** at the start of each run (it needs a clean seed); `--no-reset` skips that.
+  Do not point it at a demo in use. After a rebuild without a server restart the new assets are served as
+  `index.html` (MIME error): restart the server. Use your own port and database for isolated runs.
+- Exit code 1 on any page error, console error or failed step; the problems are printed. Look at the images.
+- Default browser: `C:/Program Files/Google/Chrome/Application/chrome.exe`; on Edge pass
+  `--browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"`.
+
+**Before presenting:** open `/admin` > Controls. The **Demo readiness** card lists the offer window (should be 45 s),
+fail-next-payment, store faults, stores online and leftover runs, each with a one-click fix; the top bar shows
+a warning label while anything is off. `pnpm e2e` leaves the window at 5 s: use the card or the 5 / 45 / 120 s chips.
+
 ## 2. Automated tests
 
 ```bash
