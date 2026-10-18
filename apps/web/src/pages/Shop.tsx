@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { AgentEvent, StoreQuoteError } from "@kiranaai/shared";
+import type { AgentEvent, BasketView, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../lib/format";
 import { useLive } from "../lib/live";
 import { useRequireSession } from "../lib/useSession";
@@ -29,6 +29,7 @@ export function Shop() {
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [quoteErrors, setQuoteErrors] = useState<StoreQuoteError[]>([]);
+  const [confirmQty, setConfirmQty] = useState(false);
   const [agentDown, setAgentDown] = useState<"unavailable" | "rate_limited" | null>(null);
 
   const basketQ = useLive(["basket"], bap.basket, { enabled: !!session });
@@ -48,19 +49,47 @@ export function Shop() {
     },
   });
 
+  const confirm = useMutation({
+    mutationFn: bap.confirmQty,
+    onSuccess: (b) => {
+      qc.setQueryData(["basket"], b);
+      setConfirmQty(false);
+      proceed(b);
+    },
+  });
+
   if (!session) return null;
   const basket = basketQ.data;
+  const hasSuggested = (b?: BasketView) => !!b?.stores.some((s) => s.items.some((i) => i.qtyInferred));
 
   function onEvents(events: AgentEvent[]) {
     setQuoteErrors([]);
-    void qc.invalidateQueries({ queryKey: ["basket"] });
-    if (events.some((e) => e.type === "approval_requested")) setApprovalOpen(true);
+    const approval = events.some((e) => e.type === "approval_requested");
+    // An agent event may only open the dialog (never approve or pay). Suggested quantities are checked first.
+    void qc.invalidateQueries({ queryKey: ["basket"] }).then(async () => {
+      if (!approval) return;
+      const fresh = (await basketQ.refetch()).data ?? qc.getQueryData<BasketView>(["basket"]);
+      if (hasSuggested(fresh)) askToConfirm();
+      else setApprovalOpen(true);
+    });
+  }
+
+  /** Quote (or open the dialog for a live quote). */
+  function proceed(b: BasketView | undefined) {
+    setSheetOpen(false);
+    if (b && quoteIsLive(b)) setApprovalOpen(true);
+    else quote.mutate();
+  }
+
+  function askToConfirm() {
+    setApprovalOpen(false);
+    setConfirmQty(true);
+    openBasket();
   }
 
   function review() {
-    setSheetOpen(false);
-    if (basket && quoteIsLive(basket)) setApprovalOpen(true);
-    else quote.mutate();
+    if (hasSuggested(basket)) askToConfirm();
+    else proceed(basket);
   }
 
   const basketView = basketQ.isError && !basket ? (
@@ -68,7 +97,12 @@ export function Shop() {
       Could not load your basket: {errorMessage(basketQ.error)}
     </InlineMessage>
   ) : basket ? (
-    <BasketPanel basket={basket} onCheckout={review} checkingOut={quote.isPending} error={quote.error ? errorMessage(quote.error) : null} quoteErrors={quoteErrors} />
+    <BasketPanel basket={basket} onCheckout={review} checkingOut={quote.isPending} error={quote.error ? errorMessage(quote.error) : null} quoteErrors={quoteErrors}
+      confirmQty={confirmQty}
+      confirmingQty={confirm.isPending}
+      onConfirmQty={() => confirm.mutate()}
+      onEditQty={() => setConfirmQty(false)}
+    />
   ) : (
     <div className="flex items-center gap-3 py-6 type-body-medium text-on-surface-variant">
       <CircularProgress size={20} className="text-primary" /> Loading basket…

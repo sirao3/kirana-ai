@@ -39,10 +39,19 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
     mutationFn: async () => {
       const b = budget.trim() ? Math.round(Number(budget) * 100) : undefined;
       const p = await bap.plan(needs, b && b > 0 ? b : undefined);
-      const merged = new Map<string, number>();
-      for (const c of p.choices) merged.set(c.offer.listingId, (merged.get(c.offer.listingId) ?? 0) + c.qty);
+      // Merge needs that resolved to the same listing; carry the optimiser's own reasons onto the lines.
+      const merged = new Map<string, { qty: number; reasons: string[] }>();
+      for (const c of p.choices) {
+        const m = merged.get(c.offer.listingId) ?? { qty: 0, reasons: [] };
+        m.qty += c.qty;
+        if (c.reason && !m.reasons.includes(c.reason)) m.reasons.push(c.reason);
+        merged.set(c.offer.listingId, m);
+      }
       if (merged.size) {
-        const basket = await bap.replace([...merged].map(([listingId, qty]) => ({ listingId, qty })));
+        const basket = await bap.replace(
+          [...merged].map(([listingId, m]) => ({ listingId, qty: m.qty, reason: m.reasons.join("; ") || null })),
+          p.reasons,
+        );
         qc.setQueryData(["basket"], basket);
       }
       return p;

@@ -27,6 +27,8 @@ export const basket = bap.table(
     status: text("status").$type<BasketStatus>().notNull().default("DRAFT"),
     /** Beckn transaction_id: one per basket checkout, reused for reassignment. */
     transactionId: text("transaction_id").notNull(),
+    /** Basket-level optimiser reasons from the last plan-derived replace (UX-02). */
+    planReasons: jsonb("plan_reasons").$type<string[]>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -48,6 +50,10 @@ export const basketItem = bap.table(
     qty: integer("qty").notNull(),
     /** Price seen at search time; the quote highlights changes against it. */
     seenPricePaise: integer("seen_price_paise").notNull(),
+    /** Why the optimiser chose this store (UX-02). */
+    reason: text("reason"),
+    /** Quantity is a suggestion the customer has not confirmed (UX-03). */
+    qtyInferred: boolean("qty_inferred").notNull().default(false),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("basket_item_listing").on(t.basketId, t.listingId)],

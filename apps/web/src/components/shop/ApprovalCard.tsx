@@ -126,6 +126,8 @@ export function ApprovalDialog({ open, basket, onClose, onPaid, onRequote, requo
   const busy = stage === "approving" || stage === "paying";
   const approved = !!token || stage === "paying";
   const total = formatINR(quote.grandTotalPaise);
+  const reasonLines = basket.stores.flatMap((s) => s.items.filter((i) => i.reason).map((i) => ({ listingId: i.listingId, name: i.name, storeName: s.storeName, reason: i.reason as string })));
+  const planReasons = basket.planReasons ?? [];
 
   let actions: React.ReactNode;
   if (expired) {
@@ -184,6 +186,26 @@ export function ApprovalDialog({ open, basket, onClose, onPaid, onRequote, requo
             <dd className="tabular-nums text-on-surface">{formatINR(quote.platformFeePaise)}</dd>
           </div>
         </dl>
+
+        {reasonLines.length + planReasons.length > 0 && (
+          <details className="group rounded-md bg-surface-container-low px-4 py-2 type-body-medium">
+            <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm py-1 type-title-small text-on-surface [&::-webkit-details-marker]:hidden">
+              <Icon name="lightbulb" size={20} className="text-tertiary" />
+              <span className="flex-1">Why these stores</span>
+              <Icon name="expand_more" size={20} className="transition-transform group-open:rotate-180" />
+            </summary>
+            <ul className="space-y-1.5 pb-1 pt-1 text-on-surface-variant">
+              {reasonLines.map((l) => (
+                <li key={l.listingId}>
+                  <span className="text-on-surface">{l.name}</span> at {l.storeName}: {l.reason}
+                </li>
+              ))}
+              {planReasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </details>
+        )}
 
         {expired ? (
           <InlineMessage tone="warning">This quote has expired. Get a fresh one; stores will re-check prices and stock.</InlineMessage>

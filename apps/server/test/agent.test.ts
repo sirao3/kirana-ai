@@ -150,7 +150,8 @@ describe("POST /bap/agent/chat (mocked Gemini)", () => {
       { type: "quote_ready", quoteId: "q1", grandTotalPaise: 92500 },
       { type: "approval_requested", basketId: "bsk_1", quoteHash: "hash_abc", grandTotalPaise: 92500 },
     ]);
-    expect(bap.calls.find((c) => c.method === "PUT")?.body).toEqual({ items: [{ listingId: "lst_atta", qty: 2 }] });
+    // Reason + suggested-qty flag come from the plan_basket result held server-side ("atta, 2" was not stated in the message).
+    expect(bap.calls.find((c) => c.method === "PUT")?.body).toEqual({ items: [{ listingId: "lst_atta", qty: 2, reason: "cheapest", qtyInferred: true }] });
     expect(bap.calls.some((c) => /approve|pay/.test(c.path))).toBe(false);
 
     const audits = await t.pool.query("SELECT count(*)::int AS n FROM audit_log WHERE action = 'agent.tool' AND entity_id = 'cust_priya'");

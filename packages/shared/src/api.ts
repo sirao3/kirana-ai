@@ -78,6 +78,10 @@ export interface BasketItemView {
   qty: number;
   seenPricePaise: number;
   lineTotalPaise: number;
+  /** Why the optimiser chose this store (from plan_basket output, never LLM text). Cleared when the line is added manually. */
+  reason?: string | null;
+  /** True while the quantity is a suggestion the customer has not confirmed or edited. */
+  qtyInferred?: boolean;
 }
 
 export interface BasketStoreGroup {
@@ -95,6 +99,17 @@ export interface BasketView {
   itemCount: number;
   /** Latest quote, if any (check `expired`). */
   quote: QuoteView | null;
+  /** Basket-level optimiser reasons stored with the last plan-derived PUT /bap/basket. */
+  planReasons?: string[];
+}
+
+// PUT /bap/basket also accepts per item `reason?: string|null`, `qtyInferred?: boolean`, and top level `planReasons?: string[]`.
+// POST /bap/basket/confirm-qty clears every qtyInferred flag on the open basket (the "Looks right" button) → BasketView.
+export interface BasketPutItem {
+  listingId: string;
+  qty: number;
+  reason?: string | null;
+  qtyInferred?: boolean;
 }
 
 // ---------- Quote: POST /bap/basket/quote → QuoteResponse ----------
@@ -219,6 +234,8 @@ export interface PlanChoice {
   offer: SearchOffer;
   /** One line, built from the numbers, e.g. "₹12 cheaper than Gupta Kirana". */
   reason: string;
+  /** Set by the agent's plan_basket tool (server-side): the quantity was not stated in the customer's message. */
+  qtyInferred?: boolean;
 }
 
 export interface PlanResult {
@@ -246,6 +263,23 @@ export interface AgentReply {
   events: AgentEvent[];
   /** Tool calls made this turn, for the "thinking…" steps. */
   steps: { tool: string; ok: boolean }[];
+}
+
+// Live progress (UX-01): POST /bap/agent/chat accepts an optional `turnId` (8-64 chars of [A-Za-z0-9_-]);
+// GET /bap/agent/turns/:turnId → AgentTurnProgress (404 for an unknown turn or another customer's turn).
+export interface AgentTurnStep {
+  tool: string;
+  /** null while the tool is running. */
+  ok: boolean | null;
+  startedAt: string;
+  endedAt: string | null;
+  /** Short data-derived text, e.g. "5 stores · 14 offers". null while running. */
+  summary: string | null;
+}
+
+export interface AgentTurnProgress {
+  steps: AgentTurnStep[];
+  done: boolean;
 }
 
 // Agent transcript for page reloads (lane C): GET /bap/agent/history → { messages }; POST /bap/agent/reset clears it.
