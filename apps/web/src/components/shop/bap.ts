@@ -1,4 +1,5 @@
 import type {
+  AddressView,
   AgentHistoryMessage,
   AgentReply,
   AgentTurnProgress,
@@ -44,6 +45,8 @@ export const bap = {
   /** Live tool steps of a running agent turn (404 until the server has registered it). */
   turn: (turnId: string) => api<AgentTurnProgress>(`/bap/agent/turns/${encodeURIComponent(turnId)}`),
   chatHistory: () => api<{ messages: AgentHistoryMessage[] }>("/bap/agent/history"),
+  address: () => api<AddressView>("/bap/profile/address"),
+  setAddress: (presetId: string) => api<AddressView>("/bap/profile/address", { method: "PATCH", json: { presetId } }),
   chatReset: () => api<{ ok: boolean }>("/bap/agent/reset", { method: "POST", json: {} }),
 };
 

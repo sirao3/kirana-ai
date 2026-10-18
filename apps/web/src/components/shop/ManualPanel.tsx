@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BasketView, PlanResult, SearchResponse } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
@@ -7,6 +7,7 @@ import {
 } from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
+import { useAddress } from "./useAddress";
 
 interface Need {
   query: string;
@@ -28,6 +29,19 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
   const [budget, setBudget] = useState("");
 
   const search = useMutation({ mutationFn: (text: string) => bap.search(text), onSuccess: setResults });
+  const address = useAddress().data;
+  const tooFar = address?.stores.filter((s) => !s.delivers) ?? [];
+
+  // A new delivery address changes which stores can serve you: refresh shown results, drop the stale plan summary.
+  const addressKey = address ? `${address.lat},${address.lng}` : null;
+  const lastKey = useRef(addressKey);
+  useEffect(() => {
+    if (!addressKey || addressKey === lastKey.current) return;
+    lastKey.current = addressKey;
+    setPlan(null);
+    if (results) search.mutate(results.query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addressKey]);
   const add = useMutation({
     mutationFn: (v: { listingId: string; label: string }) => bap.addItem(v.listingId, 1),
     onSuccess: (b: BasketView, v) => {
@@ -116,7 +130,11 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
               </InlineMessage>
             ))}
             {results.groups.length === 0 && results.looseDeclined.length === 0 && (
-              <EmptyState icon="search_off" title={`No nearby store has “${results.query}”`}>Try another name, like “aata” or “dal”, or a brand.</EmptyState>
+              <EmptyState icon="search_off" title={`No nearby store has “${results.query}”`}>
+                {tooFar.length > 0
+                  ? <>{tooFar.length === address?.stores.length ? "No store delivers to your address." : `${tooFar.length} store${tooFar.length === 1 ? "" : "s"} can't deliver to your address.`} Try another name, or change the delivery address.</>
+                  : "Try another name, like “aata” or “dal”, or a brand."}
+              </EmptyState>
             )}
             {results.groups.map((g) => (
               <Card key={g.canonicalProductId} variant="outlined" className="overflow-hidden">
@@ -160,6 +178,19 @@ export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Se
                 </ul>
               </Card>
             ))}
+            {tooFar.length > 0 && (results.groups.length > 0 || results.looseDeclined.length > 0) && (
+              <section aria-label="Stores that don't deliver to you" className="rounded-md border border-dashed border-outline-variant p-3">
+                <p className="mb-1 flex items-center gap-2 type-title-small text-on-surface-variant"><Icon name="block" size={20} /> Doesn't deliver to you</p>
+                <ul className="space-y-1">
+                  {tooFar.map((s) => (
+                    <li key={s.storeId} className="flex flex-wrap items-baseline gap-x-2 type-body-medium text-on-surface-variant">
+                      <span>{s.name}</span>
+                      <span className="type-body-small">{km(s.distanceM)} away, delivers within {km(s.radiusM)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {results.groups.length > 0 && <p className="type-body-small text-on-surface-variant">Catalogue prices. Each store confirms price and stock when you get a quote.</p>}
           </div>
         )}

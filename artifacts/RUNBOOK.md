@@ -32,6 +32,7 @@ Works the same on the hosted URL or a local server (section 3).
 
 Also try:
 - Search "gehun ka aata" (should find atta) and "250 g jeera" (declined, 100 g pack offered).
+- Tap "Delivering to Indiranagar, Bengaluru" under the Shop title, pick "CV Raman Nagar": Lakshmi and Balaji show "Doesn't deliver to you", search "atta" no longer lists them and the planner skips them. Pick Indiranagar again (or Admin > Reset) to restore the default.
 - Chat "just pay for me" (only the approval card appears) and "where is my order?".
 - `/merchant` as one store: catalogue tab, add a product (then search for it), CSV import.
 

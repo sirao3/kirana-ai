@@ -7,6 +7,7 @@ import { basketRoutes } from "./basket.js";
 import { checkoutRoutes } from "./checkout.js";
 import { orderRoutes } from "./orders.js";
 import { planRoutes } from "./plan.js";
+import { profileRoutes } from "./profile.js";
 
 /** Customer BAP API (/bap/*), lane B: search, basket, quote (T06), approve/pay (T07), orders (T08), plan (T09). Contract: packages/shared/src/api.ts */
 export const bapApiRoutes: FastifyPluginAsync = async (app) => {
@@ -27,4 +28,5 @@ export const bapApiRoutes: FastifyPluginAsync = async (app) => {
   await app.register(checkoutRoutes);
   await app.register(orderRoutes);
   await app.register(planRoutes);
+  await app.register(profileRoutes);
 };

@@ -107,6 +107,29 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await c.getByRole("tab", { name: /Assistant/ }).waitFor();
   await settle(c);
   await shot(c, "shop-assistant");
+
+  // 2b. UX-14: delivery address sheet, a farther address, and its effect on search; then back to the default address.
+  const openAddress = () => c.getByRole("button", { name: /Delivering to/ }).click();
+  await c.getByRole("button", { name: /Delivering to Indiranagar/ }).waitFor();
+  await openAddress();
+  await c.getByRole("radio", { name: /CV Raman Nagar/ }).waitFor();
+  await settle(c, 500);
+  await shot(c, "address-sheet", true);
+  await c.getByRole("radio", { name: /CV Raman Nagar/ }).click();
+  await c.getByText("3 of 5 stores deliver here", { exact: false }).waitFor();
+  await settle(c, 500);
+  await shot(c, "address-sheet-far", true);
+  await c.getByRole("button", { name: "Done", exact: true }).click();
+  await c.getByRole("tab", { name: /Search & plan/ }).click();
+  await c.getByRole("searchbox", { name: "Search products" }).fill("atta");
+  await c.keyboard.press("Enter");
+  await c.getByText("Doesn't deliver to you").first().waitFor();
+  await settle(c, 500);
+  await shot(c, "search-out-of-radius");
+  await openAddress();
+  await c.getByRole("radio", { name: /Indiranagar/ }).click();
+  await c.getByText("All 5 stores deliver", { exact: false }).waitFor();
+  await c.getByRole("button", { name: "Done", exact: true }).click();
   await c.getByRole("tab", { name: /Search & plan/ }).click();
   await c.getByRole("searchbox", { name: "Search products" }).fill("atta");
   await c.keyboard.press("Enter");

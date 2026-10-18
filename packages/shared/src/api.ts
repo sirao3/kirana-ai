@@ -306,6 +306,57 @@ export interface MerchantLedger {
   totals: { grossPaise: number; commissionPaise: number; netPayablePaise: number; platformSubsidyPaise: number };
 }
 
+// ---------- Delivery address (UX-14) ----------
+// GET   /bap/profile/address → AddressView (saved address + which stores deliver to it)
+// PATCH /bap/profile/address {presetId} | {address, lat, lng} → AddressView
+// Search, plan, quote and the agent all read the saved address, so changing it changes which stores serve you.
+// No Google Places (no key): the UI offers ADDRESS_PRESETS.
+
+export interface AddressPreset {
+  id: string;
+  /** Short area label, e.g. "Indiranagar, Bengaluru". */
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+  /** What changing to it demonstrates. */
+  hint: string;
+}
+
+/** Demo addresses around the 5 seeded stores (distances checked in address.test.ts). */
+export const ADDRESS_PRESETS: AddressPreset[] = [
+  { id: "indiranagar", label: "Indiranagar, Bengaluru", address: "12, 7th Cross, Indiranagar, Bengaluru 560038", lat: 12.9719, lng: 77.6412, hint: "All 5 stores deliver here." },
+  { id: "cv-raman-nagar", label: "CV Raman Nagar, Bengaluru", address: "45, 2nd Main, CV Raman Nagar, Bengaluru 560093", lat: 12.985, lng: 77.664, hint: "Lakshmi and Balaji are too far." },
+  { id: "koramangala", label: "Koramangala, Bengaluru", address: "88, 5th Block, Koramangala, Bengaluru 560095", lat: 12.9352, lng: 77.6245, hint: "Only Annapurna delivers here." },
+  { id: "whitefield", label: "Whitefield, Bengaluru", address: "7, ITPL Main Road, Whitefield, Bengaluru 560066", lat: 12.9698, lng: 77.75, hint: "No store delivers here." },
+];
+
+export interface StoreServiceability {
+  storeId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+  distanceM: number;
+  /** Within the delivery radius (ignores opening hours and stock). */
+  delivers: boolean;
+  /** Store switched off by the merchant or closed now. */
+  open: boolean;
+}
+
+export interface AddressView {
+  address: string;
+  /** "Indiranagar, Bengaluru": the last two parts of the address, without the pincode. */
+  label: string;
+  lat: number;
+  lng: number;
+  /** Empty if the store list could not be loaded. */
+  stores: StoreServiceability[];
+  presets: AddressPreset[];
+}
+
+export type AddressPatch = { presetId: string } | { address: string; lat: number; lng: number };
+
 // ---------- Small helpers ----------
 
 export function packLabel(packSize: number, unit: string): string {
