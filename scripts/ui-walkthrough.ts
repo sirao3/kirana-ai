@@ -131,7 +131,10 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await c.getByText("All 5 stores deliver", { exact: false }).waitFor();
   await c.getByRole("button", { name: "Done", exact: true }).click();
   await c.getByRole("tab", { name: /Search & plan/ }).click();
-  await c.getByRole("searchbox", { name: "Search products" }).fill("atta");
+  await c.getByRole("combobox", { name: "Search products" }).fill("atta");
+  await c.getByRole("option").first().waitFor(); // UX-13: suggestion list
+  await settle(c, 300);
+  await shot(c, "shop-suggest");
   await c.keyboard.press("Enter");
   const add = c.getByRole("button", { name: /Add Whole Wheat Atta from Sharma/ });
   await add.waitFor();

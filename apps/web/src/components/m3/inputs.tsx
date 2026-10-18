@@ -126,7 +126,9 @@ export const CellField = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<H
 });
 
 /** M3 search bar: a pill on surface-container-high with a leading search icon. Submitting runs onSubmit. */
-export function SearchBar({ value, onValueChange, onSubmit, placeholder, label, trailing, busy, autoFocus }: {
+export function SearchBar({ value, onValueChange, onSubmit, placeholder, label, trailing, busy, autoFocus, inputProps }: {
+  /** Extra attributes for the input (combobox ARIA, key handlers). */
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
   value: string;
   onValueChange: (v: string) => void;
   onSubmit?: () => void;
@@ -152,6 +154,7 @@ export function SearchBar({ value, onValueChange, onSubmit, placeholder, label, 
         placeholder={placeholder}
         value={value}
         autoFocus={autoFocus}
+        {...inputProps}
         onChange={(e) => onValueChange(e.target.value)}
         className="h-full min-w-0 flex-1 bg-transparent px-2 type-body-large text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:outline-none [&::-webkit-search-cancel-button]:hidden"
       />

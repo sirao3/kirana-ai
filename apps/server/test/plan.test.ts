@@ -202,6 +202,33 @@ describe("POST /bap/plan", () => {
     expect(r.body.unmatched.map((u) => u.query)).toEqual(expect.arrayContaining(["unobtainium"]));
   });
 
+  it("prices the current basket as a baseline, and canonicalProductId restricts candidates", async () => {
+    const needs = SEED.demo.needs.map((n) => ({ query: n.query, qty: n.qty }));
+    const plan = await h.call<PlanResult>("POST", "/bap/plan", { needs });
+    expect(plan.body.baseline).toBeUndefined();
+    const current = plan.body.choices.map((c) => ({ listingId: c.offer.listingId, qty: c.qty }));
+    const same = await h.call<PlanResult>("POST", "/bap/plan", { needs, current });
+    expect(same.body.baseline!.estimatedTotalPaise).toBe(same.body.estimatedTotalPaise);
+    // a basket that is not the plan's (all four from one store's offers) is priced above the plan
+    const sharmaOnly = [{ listingId: listingId("sharma", "cp_atta_aashirvaad_10kg"), qty: 1 }, { listingId: listingId("sharma", "cp_milk_amul_taaza_1l"), qty: 8 }];
+    const worse = await h.call<PlanResult>("POST", "/bap/plan", { needs: [needs[0]!, needs[3]!], current: sharmaOnly });
+    expect(worse.body.baseline!.estimatedTotalPaise).toBeGreaterThanOrEqual(worse.body.estimatedTotalPaise);
+    const pinned = await h.call<PlanResult>("POST", "/bap/plan", {
+      needs: [{ query: "milk", qty: 8, canonicalProductId: "cp_milk_amul_taaza_1l" }],
+    });
+    expect(new Set(pinned.body.choices.map((c) => c.offer.canonicalProductId))).toEqual(new Set(["cp_milk_amul_taaza_1l"]));
+  });
+
+  it("GET /bap/suggest returns distinct products for a partial or synonym query", async () => {
+    const r = await h.call<{ query: string; suggestions: { canonicalProductId: string; name: string; fromPricePaise: number }[] }>("GET", "/bap/suggest?q=gehun");
+    expect(r.status).toBe(200);
+    const ids = r.body.suggestions.map((x) => x.canonicalProductId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain("cp_atta_aashirvaad_10kg");
+    expect(r.body.suggestions[0]!.fromPricePaise).toBeGreaterThan(0);
+    expect((await h.call("GET", "/bap/suggest?q=")).status).toBe(400);
+  });
+
   it("validates the body", async () => {
     expect((await h.call("POST", "/bap/plan", { needs: [{ query: "atta", qty: 1.5 }] })).status).toBe(400);
     expect((await h.call("POST", "/bap/plan", { needs: [] })).status).toBe(400);

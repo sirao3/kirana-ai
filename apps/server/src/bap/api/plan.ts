@@ -4,8 +4,9 @@ import { planForCustomer } from "../plan/index.js";
 import { loadCustomer } from "../util.js";
 
 const Body = z.object({
-  needs: z.array(z.object({ query: z.string().trim().min(1).max(200), qty: z.number().int().min(1).max(999) })).min(1).max(12),
+  needs: z.array(z.object({ query: z.string().trim().min(1).max(200), qty: z.number().int().min(1).max(999), canonicalProductId: z.string().max(100).optional() })).min(1).max(12),
   budgetPaise: z.number().int().positive().optional(),
+  current: z.array(z.object({ listingId: z.string().min(1).max(100), qty: z.number().int().min(1).max(999) })).max(50).optional(),
 });
 
 export const planRoutes: FastifyPluginAsync = async (app) => {
