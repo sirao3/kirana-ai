@@ -7,7 +7,7 @@ import { Button } from "../ui";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
 import { basketToNeeds, nudgeFrom, type Nudge } from "./pricing";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 /** Signature of the lines a plan was computed for: any edit invalidates a stale suggestion. */
 const signature = (b: BasketView) => b.stores.flatMap((s) => s.items.map((i) => `${i.listingId}:${i.qty}`)).sort().join("|");
@@ -45,7 +45,7 @@ export function OptimiseNudge({ basket }: { basket: BasketView }) {
           <motion.div key="nudge" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={ease}>
             <p className="text-[14px] font-semibold" style={{ color: C.green }}>{nudge.text}</p>
             <p className="mt-0.5 text-[12px]" style={{ color: C.secondary }}>From catalogue prices and each store's delivery charge. The verified total is exact.</p>
-            {apply.error && <p role="alert" className="mt-1 text-[13px]" style={{ color: C.red }}>{errorMessage(apply.error)}</p>}
+            {apply.error && <p role="alert" className="mt-1 text-[13px]" style={{ color: DANGER }}>{errorMessage(apply.error)}</p>}
             <div className="mt-2 flex gap-2">
               <Button size="sm" variant="primary" busy={apply.isPending} onClick={() => apply.mutate(nudge)}>Apply</Button>
               <Button size="sm" variant="secondary" disabled={apply.isPending} onClick={() => setDismissedSig(sig)}>Not now</Button>
@@ -59,7 +59,7 @@ export function OptimiseNudge({ basket }: { basket: BasketView }) {
               {run.isPending ? "Comparing store combinations…" : "Optimise this basket"}
             </button>
             {current && !nudge && <p className="text-[12px]" style={{ color: C.secondary }}>This is already the cheapest mix of stores.</p>}
-            {run.error && <p role="alert" className="text-[13px]" style={{ color: C.red }}>{errorMessage(run.error)}</p>}
+            {run.error && <p role="alert" className="text-[13px]" style={{ color: DANGER }}>{errorMessage(run.error)}</p>}
           </motion.div>
         )}
       </AnimatePresence>

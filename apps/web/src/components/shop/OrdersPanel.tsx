@@ -6,7 +6,7 @@ import { Button, C, IChevron, Skeleton, Spinner, StatusText, soft } from "../ui"
 import { errorMessage } from "./errors";
 import { orderPriceProtected } from "./handoff";
 import { OrderDetail, orderSummary } from "./OrderDetail";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
@@ -14,7 +14,7 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 export function OrdersList({ orders, error, onRetry, onShop }: { orders: OrderView[] | undefined; error: unknown; onRetry: () => void; onShop: () => void }) {
   if (!orders) {
     return error ? (
-      <p role="alert" className="px-1 pt-4 text-[15px]" style={{ color: C.red }}>
+      <p role="alert" className="px-1 pt-4 text-[15px]" style={{ color: DANGER }}>
         Could not load your orders: {errorMessage(error)}{" "}
         <button type="button" onClick={onRetry} className="cursor-pointer font-semibold" style={{ color: LINK }}>Retry</button>
       </p>
@@ -61,7 +61,7 @@ export function OrdersList({ orders, error, onRetry, onShop }: { orders: OrderVi
 export function OrderPage({ order, error, onRetry, now }: { order: OrderView | undefined; error: unknown; onRetry: () => void; now: number }) {
   if (order) return <div className="pt-3"><OrderDetail order={order} now={now} full /></div>;
   return error ? (
-    <p role="alert" className="px-1 pt-4 text-[15px]" style={{ color: C.red }}>
+    <p role="alert" className="px-1 pt-4 text-[15px]" style={{ color: DANGER }}>
       Could not load this order: {errorMessage(error)}{" "}
       <button type="button" onClick={onRetry} className="cursor-pointer font-semibold" style={{ color: LINK }}>Retry</button>
     </p>

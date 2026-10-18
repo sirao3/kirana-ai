@@ -9,7 +9,7 @@ import { bap } from "./bap";
 import { errorMessage } from "./errors";
 import { useAddress } from "./useAddress";
 import { addNeed as addToList, cheapestListingId, choicesToBasketItems, effectiveLabel, loadRecent, parseNeeds, pushRecent, rankOffers, type ListNeed } from "./pricing";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 
@@ -168,8 +168,8 @@ export function ManualPanel({ basketItemIds }: { basketItemIds: Set<string> }) {
               </motion.div>
         </div>
         {!results && !search.isPending && <p className="mt-2 px-1 text-[13px]" style={{ color: C.secondary }}>Compare the same pack across the stores on the map, delivery included.</p>}
-        {search.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(search.error)}</p>}
-        {add.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(add.error)}</p>}
+        {search.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: DANGER }}>{errorMessage(search.error)}</p>}
+        {add.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: DANGER }}>{errorMessage(add.error)}</p>}
 
         {results && (
           <motion.div key={results.query} initial="h" animate="s" variants={{ s: { transition: { staggerChildren: 0.05 } } }} className="mt-4 space-y-5" aria-live="polite">
@@ -274,19 +274,19 @@ export function ManualPanel({ basketItemIds }: { basketItemIds: Set<string> }) {
           <TextField className="w-40" label="Budget (optional)" prefix="₹" inputMode="decimal" value={budget} onValueChange={setBudget} error={budgetInvalid ? "Enter an amount like 1500" : undefined} />
           <Button className="mt-[22px] flex-1" busy={optimise.isPending} disabled={!needs.length || budgetInvalid} onClick={() => optimise.mutate()}>Optimise basket</Button>
         </div>
-        {optimise.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: C.red }}>{errorMessage(optimise.error)}</p>}
+        {optimise.error && <p role="alert" className="mt-3 px-1 text-[14px]" style={{ color: DANGER }}>{errorMessage(optimise.error)}</p>}
         <AnimatePresence>
           {plan && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={ease} role="status" className="mt-4 px-1">
               <p className="text-[15px] font-semibold" style={{ color: C.label }}>
                 Basket updated · about {formatINR(plan.estimatedTotalPaise)}
-                {plan.withinBudget === false && <span style={{ color: C.red }}> · over budget</span>}
+                {plan.withinBudget === false && <span style={{ color: DANGER }}> · over budget</span>}
                 {plan.withinBudget === true && <span style={{ color: C.green }}> · within budget</span>}
               </p>
               <ul className="mt-1.5 space-y-1 text-[13px] leading-[1.45]" style={{ color: C.secondary }}>
                 {plan.choices.map((c) => <li key={`${c.query}-${c.offer.listingId}`}><span style={{ color: C.label }}>{c.qty}× {c.offer.name}</span> at {c.offer.storeName} · {c.reason}</li>)}
                 {plan.reasons.map((r) => <li key={r}>{r}</li>)}
-                {plan.unmatched.map((u) => <li key={u.query} style={{ color: C.red }}>{u.query}: {u.reason}</li>)}
+                {plan.unmatched.map((u) => <li key={u.query} style={{ color: DANGER }}>{u.query}: {u.reason}</li>)}
               </ul>
             </motion.div>
           )}

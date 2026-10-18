@@ -8,6 +8,7 @@ import { bap } from "./bap";
 import { errorMessage } from "./errors";
 import { OptimiseNudge } from "./OptimiseNudge";
 import { hasSuggested, type Checkout } from "./useCheckout";
+import { DANGER } from "./tokens";
 
 export function quoteIsLive(b: BasketView): boolean {
   return b.status === "QUOTED" && !!b.quote && !b.quote.expired && new Date(b.quote.validUntil).getTime() > Date.now();
@@ -72,7 +73,7 @@ export function BasketPanel({ basket, now, quoteErrors, editable = true, bare = 
                 <span className="text-[15px] font-semibold" style={{ color: C.label, fontVariantNumeric: "tabular-nums" }}>{formatINR(qs ? qs.totalPaise : g.itemsTotalPaise)}</span>
               </div>
               {qs && <p className="text-[12px]" style={{ color: C.secondary }}>{qs.deliveryPaise ? `includes ${formatINR(qs.deliveryPaise)} delivery` : "Free delivery"}</p>}
-              {err && <p role="alert" className="mt-0.5 text-[13px]" style={{ color: C.red }}>{err.message || err.code.replace(/_/g, " ").toLowerCase()}. Change or remove these items, then get the total again.</p>}
+              {err && <p role="alert" className="mt-0.5 text-[13px]" style={{ color: DANGER }}>{err.message || err.code.replace(/_/g, " ").toLowerCase()}. Change or remove these items, then get the total again.</p>}
               <ul className="mt-1">
                 {g.items.map((it) => {
                   const ql = qs?.lines.find((l) => l.listingId === it.listingId);
@@ -80,12 +81,12 @@ export function BasketPanel({ basket, now, quoteErrors, editable = true, bare = 
                   return (
                     <li key={it.listingId} className="flex items-center gap-3 py-1.5">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[14px] leading-[1.35]" style={{ color: gone ? C.red : C.label, textDecoration: gone ? "line-through" : undefined }}>
+                        <p className="text-[14px] leading-[1.35]" style={{ color: gone ? DANGER : C.label, textDecoration: gone ? "line-through" : undefined }}>
                           {it.name}
                           {it.qtyInferred && <span className="ml-1.5 text-[12px] font-semibold" style={{ color: "#B25E00" }}>suggested</span>}
                         </p>
                         {it.reason && <p className="mt-0.5 flex items-start gap-1 text-[12px] leading-[1.35]" style={{ color: C.secondary }}><span className="mt-px shrink-0" style={{ color: C.tertiary }}><ISpark size={12} /></span>{it.reason}</p>}
-                        {gone && <p className="text-[12px]" style={{ color: C.red }}>Unavailable at this store</p>}
+                        {gone && <p className="text-[12px]" style={{ color: DANGER }}>Unavailable at this store</p>}
                         {ql?.priceChanged && <p className="text-[12px]" style={{ color: "#B25E00" }}>Price changed {formatINR(ql.seenPricePaise)} → {formatINR(ql.unitPricePaise)}</p>}
                       </div>
                       {editable ? (
@@ -109,7 +110,7 @@ export function BasketPanel({ basket, now, quoteErrors, editable = true, bare = 
         </ul>
       )}
       {editable && !live && <OptimiseNudge basket={basket} />}
-      {edit.error && <p role="alert" className="mt-2 text-[13px]" style={{ color: C.red }}>{errorMessage(edit.error)}</p>}
+      {edit.error && <p role="alert" className="mt-2 text-[13px]" style={{ color: DANGER }}>{errorMessage(edit.error)}</p>}
       {suggested > 0 && (
         <p className="mt-3 text-[13px] leading-[1.4]" style={{ color: C.secondary }}>
           We guessed {suggested} quantit{suggested === 1 ? "y" : "ies"}. Check {suggested === 1 ? "it" : "them"}, then confirm below.
@@ -124,7 +125,7 @@ function Qty({ name, value, onChange, disabled }: { name: string; value: number;
   const btn = "flex h-9 w-9 cursor-pointer items-center justify-center rounded-[10px] transition-colors hover:bg-black/[0.05] disabled:cursor-default disabled:opacity-35";
   return (
     <span role="group" aria-label={`Quantity of ${name}`} className="inline-flex shrink-0 items-center rounded-[11px]" style={{ background: C.fill }}>
-      <button type="button" className={btn} aria-label={value <= 1 ? `Remove ${name}` : `Fewer: ${name}`} disabled={disabled} onClick={() => onChange(value - 1)} style={{ color: value <= 1 ? C.red : C.label }}>
+      <button type="button" className={btn} aria-label={value <= 1 ? `Remove ${name}` : `Fewer: ${name}`} disabled={disabled} onClick={() => onChange(value - 1)} style={{ color: value <= 1 ? DANGER : C.label }}>
         {value <= 1 ? <ITrash size={15} /> : <IMinus size={15} />}
       </button>
       <span className="min-w-5 text-center text-[14px] font-semibold" style={{ color: C.label, fontVariantNumeric: "tabular-nums" }}>{value}</span>
@@ -139,7 +140,7 @@ export function CheckoutButton({ basket, checkout }: { basket: BasketView; check
   const label = suggested ? "Quantities look right" : quoteIsLive(basket) ? `Pay ${formatINR(basket.quote!.grandTotalPaise)}` : "Get verified total";
   return (
     <div>
-      {checkout.error && <p role="alert" className="mb-2 text-[13px]" style={{ color: C.red }}>{errorMessage(checkout.error)}</p>}
+      {checkout.error && <p role="alert" className="mb-2 text-[13px]" style={{ color: DANGER }}>{errorMessage(checkout.error)}</p>}
       <motion.button type="button" onClick={() => checkout.primary(basket)} disabled={checkout.busy} aria-busy={checkout.busy || undefined} whileTap={checkout.busy ? undefined : { scale: 0.97 }} transition={soft}
         className="flex h-[54px] w-full cursor-pointer items-center justify-center gap-2 text-[17px] font-semibold text-white disabled:cursor-default" style={{ background: C.label, borderRadius: 16 }}>
         {checkout.busy ? <><Spinner size={20} color="#fff" /><span className="sr-only">Checking with stores</span></> : label}

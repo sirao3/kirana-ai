@@ -20,7 +20,7 @@ import { PaySheet } from "../components/shop/PaySheet";
 import { ShopMap } from "../components/shop/ShopMap";
 import { useAddress } from "../components/shop/useAddress";
 import { useCheckout } from "../components/shop/useCheckout";
-import { LINK } from "../components/shop/tokens";
+import { DANGER, LINK } from "../components/shop/tokens";
 
 type Tab = "assistant" | "search";
 
@@ -101,7 +101,7 @@ function ShopApp({ session }: { session: Session }) {
       <AnimatePresence>
         {inFlight.length > 0 && (
           <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={soft} aria-hidden
-            className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white" style={{ background: C.red }}>{inFlight.length}</motion.span>
+            className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white" style={{ background: DANGER }}>{inFlight.length}</motion.span>
         )}
       </AnimatePresence>
     </Link>

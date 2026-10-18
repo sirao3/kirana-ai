@@ -7,7 +7,7 @@ import { C, CheckDraw, Checkbox, Money, Sheet, Spinner, soft, spring } from "../
 import { bap, newIdempotencyKey } from "./bap";
 import { mmss, quoteIsLive } from "./BasketPanel";
 import { errorMessage } from "./errors";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 type Stage = "idle" | "paying" | "done";
 const packs = (n: number) => `${n} pack${n === 1 ? "" : "s"}`;
@@ -90,7 +90,7 @@ export function PaySheet({ open, basket: polled, now, onClose, onRequote, requot
           <div role="status" aria-live="polite" className="sr-only">{done ? `Paid ${formatINR(quote.grandTotalPaise)}.` : stage === "paying" ? "Paying." : ""}</div>
           <p className="text-center text-[13px] font-medium" style={{ color: C.secondary }}>{done ? "Paid by UPI" : "Exact total"}</p>
           <Money value={quote.grandTotalPaise} className="mt-1 block text-center text-[46px] font-bold leading-[1.1] tracking-[-0.03em]" style={{ color: C.label }} />
-          <p className="mt-1 text-center text-[13px]" style={{ color: expired && !done ? C.red : C.secondary, fontVariantNumeric: "tabular-nums" }}>
+          <p className="mt-1 text-center text-[13px]" style={{ color: expired && !done ? DANGER : C.secondary, fontVariantNumeric: "tabular-nums" }}>
             {done ? "Sending your order to the stores" : expired ? "This quote has expired" : `Verified with each store · held for ${mmss(new Date(quote.validUntil).getTime() - now)}`}
           </p>
           <ul className="mt-5" style={{ borderTop: `0.5px solid ${C.sep}` }}>
@@ -108,7 +108,7 @@ export function PaySheet({ open, basket: polled, now, onClose, onRequote, requot
             </li>
           </ul>
           <p className="mt-3 text-[13px] leading-[1.45]" style={{ color: C.secondary }}>Only you can approve. The assistant can't pay or confirm on your behalf. Payment is simulated; stores get the order once it succeeds.</p>
-          {error && <p role="alert" className="mt-2 text-[14px]" style={{ color: C.red }}>{error}</p>}
+          {error && <p role="alert" className="mt-2 text-[14px]" style={{ color: DANGER }}>{error}</p>}
 
           <div className="mt-5 flex justify-center">
             {expired && !done ? (
