@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";

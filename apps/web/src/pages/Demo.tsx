@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import { useLive } from "../lib/live";
 import { getSession, setSession, type Session } from "../lib/session";
 import { EXPANDED, useMedia } from "../lib/useMedia";
-import { useSnackbar } from "../components/m3";
+import { useSnackbar } from "../components/ui/toast";
 import { unlockAudio } from "../components/merchant/alert";
 import { setAllOnline, useWallTokens } from "../components/merchant/useWallTokens";
 import { bap } from "../components/shop/bap";

@@ -2,7 +2,7 @@ import { useId } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AddressView } from "@kiranaai/shared";
 import { Button, C, CheckDraw, IPin, Sheet, Spinner } from "../ui";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
 import { LINK } from "./tokens";

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MotionConfig } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSnackbar } from "../components/m3";
+import { useSnackbar } from "../components/ui/toast";
 import { Button, C, FONT, ISound, Notice, Skeleton } from "../components/ui";
 import { unlockAudio, useAudioUnlocked } from "../components/merchant/alert";
 import { StoreTile } from "../components/merchant/StoreDashboard";

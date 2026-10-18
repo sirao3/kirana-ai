@@ -5,7 +5,7 @@ import { paiseToRupees, rupeesToPaise } from "@kiranaai/shared";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";
 import { EXPANDED, useMedia } from "../../lib/useMedia";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { Alert, Button, C, Group, Notice, Row, Segmented, Skeleton, StatusText, Switch, TextField, cx, ease } from "../ui";
 
 export interface AdminConfig {

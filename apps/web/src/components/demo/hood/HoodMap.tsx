@@ -244,7 +244,7 @@ const PIN_FILL: Record<Tone, string> = { idle: "#FF9F0A", offer: "#FF9500", busy
 export function Pin({ at, name, st }: { at: Pt; name: string; st: PinState }) {
   return (
     <g transform={`translate(${at.x},${at.y})`}>
-      {st.tone === "offer" && <motion.circle key={st.offer!.id} r={18} fill="none" stroke="#FF9500" strokeWidth={3} initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 2.6, opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />}
+      {st.tone === "offer" && <motion.circle key={st.offer?.id ?? "offer"} r={18} fill="none" stroke="#FF9500" strokeWidth={3} initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 2.6, opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />}
       <motion.g animate={{ scale: st.tone === "idle" || st.tone === "off" ? 1 : 1.18 }} transition={spring}>
         <circle r={17} fill="#fff" style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.22))" }} />
         <motion.circle r={14} animate={{ fill: PIN_FILL[st.tone] }} transition={{ duration: 0.3 }} />

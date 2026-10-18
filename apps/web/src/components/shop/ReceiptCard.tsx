@@ -1,7 +1,7 @@
 import type { OrderView } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
 import { Button, C, IPrint, IUpload, cardShadow } from "../ui";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { buildReceipt, receiptText } from "./receipt";
 
 /** Settled-order receipt: per store, refunds, platform-covered difference, total. Share + Print (see `.print-area` in index.css). */

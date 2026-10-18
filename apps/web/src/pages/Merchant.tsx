@@ -3,7 +3,7 @@ import { MotionConfig } from "motion/react";
 import { formatINR } from "../lib/format";
 import { getSession, setSession, type Session } from "../lib/session";
 import { useMedia } from "../lib/useMedia";
-import { useSnackbar } from "../components/m3";
+import { useSnackbar } from "../components/ui/toast";
 import { AppFrame, Button, C, CheckDraw, EmptyState, Group, IBolt, ICheckCircle, IList, IWallet, LargeTitle, Notice, Row, Skeleton, shortName, type FrameNav } from "../components/ui";
 import { AudioBanner } from "../components/merchant/AudioBanner";
 import { Catalogue } from "../components/merchant/Catalogue";

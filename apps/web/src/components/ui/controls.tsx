@@ -11,8 +11,8 @@ export type ButtonVariant = "primary" | "secondary" | "tinted" | "plain" | "dest
 const BTN: Record<ButtonVariant, React.CSSProperties> = {
   primary: { background: C.label, color: "#fff" },
   secondary: { background: C.fill, color: C.label },
-  tinted: { background: "rgba(31,138,62,0.12)", color: C.green },
-  plain: { background: "transparent", color: C.blue },
+  tinted: { background: "rgba(31,138,62,0.12)", color: "#17692F" },
+  plain: { background: "transparent", color: C.link },
   destructive: { background: "rgba(229,55,43,0.10)", color: C.red },
   danger: { background: C.red, color: "#fff" },
 };
@@ -69,8 +69,13 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
           <button key={o.value} type="button" role="tab" aria-selected={sel} onClick={() => onChange(o.value)}
             onKeyDown={(e) => {
               const i = options.findIndex((x) => x.value === value);
-              if (e.key === "ArrowRight") onChange(options[(i + 1) % options.length]!.value);
-              if (e.key === "ArrowLeft") onChange(options[(i - 1 + options.length) % options.length]!.value);
+              const to = e.key === "ArrowRight" ? (i + 1) % options.length : e.key === "ArrowLeft" ? (i - 1 + options.length) % options.length
+                : e.key === "Home" ? 0 : e.key === "End" ? options.length - 1 : -1;
+              if (to < 0) return;
+              e.preventDefault();
+              onChange(options[to]!.value);
+              const tabs = (e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')) ?? [];
+              tabs[to]?.focus();
             }}
             tabIndex={sel ? 0 : -1}
             className={cx("relative flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] font-medium", size === "sm" ? "h-7 px-3 text-[13px]" : "h-8 px-4 text-[14px]")}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { Button, C, CheckDraw, Group, IWarning, Notice, Row, Skeleton, StatusText } from "../ui";
 import { HIT, type AdminConfig } from "./ControlPanels";
 

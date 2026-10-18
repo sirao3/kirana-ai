@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { OrderView } from "@kiranaai/shared";
-import { useSnackbar } from "../m3";
+import { useSnackbar } from "../ui/toast";
 import { diffOrder } from "./handoff";
 
 /**
