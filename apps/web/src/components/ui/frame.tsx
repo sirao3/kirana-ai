@@ -62,7 +62,7 @@ function AccountButton({ account, compact }: { account: FrameAccount; compact?: 
         {!compact && (
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-medium" style={{ color: C.label }}>{account.name}</span>
-            <span className="block text-[12px] capitalize" style={{ color: C.secondary }}>{account.role}</span>
+            <span className="block text-[12px] first-letter:uppercase" style={{ color: C.secondary }}>{account.role}</span>
           </span>
         )}
       </button>
