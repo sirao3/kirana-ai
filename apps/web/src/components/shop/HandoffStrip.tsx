@@ -1,9 +1,10 @@
 import { Fragment } from "react";
 import type { AttemptStatus, SubOrderView } from "@kiranaai/shared";
 import { C, shortName } from "../ui";
+import { DANGER } from "./tokens";
 
 const WORD: Record<AttemptStatus, string> = { PENDING: "contacting", OFFERED: "deciding", ACCEPTED: "accepted", REJECTED: "declined", EXPIRED: "no answer" };
-const COLOR: Record<AttemptStatus, string> = { PENDING: C.secondary, OFFERED: "#B25E00", ACCEPTED: C.green, REJECTED: C.red, EXPIRED: C.red };
+const COLOR: Record<AttemptStatus, string> = { PENDING: C.secondary, OFFERED: "#B25E00", ACCEPTED: C.green, REJECTED: DANGER, EXPIRED: DANGER };
 
 /** Who was asked, in order: "1 Lakshmi declined → 2 Annapurna accepted". Shown only when the order changed hands. */
 export function HandoffStrip({ sub }: { sub: SubOrderView }) {

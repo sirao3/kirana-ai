@@ -5,7 +5,7 @@ import { Button, C, CheckDraw, IPin, Sheet, Spinner } from "../ui";
 import { useSnackbar } from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 
@@ -39,7 +39,7 @@ export function AddressSheet({ open, onClose, address, error, onRetry }: {
     <Sheet open={open} onClose={onClose} title="Delivery address" width={480} footer={<Button onClick={onClose}>Done</Button>}>
       {!address ? (
         error ? (
-          <p role="alert" className="text-[15px]" style={{ color: C.red }}>
+          <p role="alert" className="text-[15px]" style={{ color: DANGER }}>
             Could not load your address: {errorMessage(error)}{" "}
             <button type="button" className="cursor-pointer font-semibold" style={{ color: LINK }} onClick={onRetry}>Retry</button>
           </p>
@@ -70,7 +70,7 @@ export function AddressSheet({ open, onClose, address, error, onRetry }: {
               })}
             </div>
             <p className="mt-1.5 px-1 text-[12px]" style={{ color: C.secondary }}>Address search isn't connected in this demo, so these presets stand in for it.</p>
-            {change.error && <p role="alert" className="mt-2 px-1 text-[13px]" style={{ color: C.red }}>{errorMessage(change.error)}</p>}
+            {change.error && <p role="alert" className="mt-2 px-1 text-[13px]" style={{ color: DANGER }}>{errorMessage(change.error)}</p>}
           </section>
 
           <section aria-labelledby={`${id}-near`}>

@@ -11,7 +11,7 @@ import { isAgentDown } from "./errors";
 import { OrderDetail, isInFlight } from "./OrderDetail";
 import type { Checkout } from "./useCheckout";
 import { useVoiceRecorder, voiceSupported } from "./voice";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 interface Msg {
   id: number;
@@ -70,7 +70,7 @@ export function StepList({ steps }: { steps: AgentTurnStep[] }) {
       {steps.length === 0 && <li className="flex items-center gap-2.5 text-[14px]" style={{ color: C.secondary }}><Spinner size={15} /> Thinking</li>}
       {steps.map((s, i) => (
         <motion.li key={i} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={soft} className="flex items-center gap-2.5 text-[14px]" style={{ color: s.ok === null ? C.label : C.secondary }}>
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center">{s.ok === null ? <Spinner size={15} /> : s.ok ? <CheckDraw size={17} color={C.tertiary} /> : <span style={{ color: C.red }}><IClose size={14} /></span>}</span>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center">{s.ok === null ? <Spinner size={15} /> : s.ok ? <CheckDraw size={17} color={C.tertiary} /> : <span style={{ color: DANGER }}><IClose size={14} /></span>}</span>
           <span className="min-w-0 truncate">
             {TOOL_LABEL[s.tool] ?? s.tool}
             {s.summary ? <span style={{ color: C.tertiary }}> · {s.summary}</span> : null}
@@ -249,7 +249,7 @@ export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenO
                 ))}
               </ol>
               {thinking && <StepList steps={steps} />}
-              {agentDown && !thinking && (
+              {agentDown && !thinking && !hasItems && !tracked && (
                 <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={soft} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] px-4 py-3" style={{ background: C.fill }}>
                   <p className="min-w-0 flex-1 text-[14px]" style={{ color: C.label }}>{agentDown === "busy" ? "Too many requests right now." : "The assistant is unavailable."} Search works without it.</p>
                   <Button size="sm" variant="primary" onClick={onUseSearch}>Search instead</Button>
@@ -284,13 +284,13 @@ export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenO
         {recording ? (
           <div role="group" aria-label="Recording a voice message" className="flex items-center gap-2 bg-white" style={{ borderRadius: 22, padding: 6, boxShadow: cardShadow }}>
             <button type="button" aria-label="Cancel recording" onClick={voice.cancel} className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-black/[0.05]" style={{ color: C.secondary }}><IClose size={16} /></button>
-            <motion.span className="h-2 w-2 shrink-0 rounded-full" style={{ background: C.red }} animate={{ opacity: [1, 0.3, 1] }} transition={{ repeat: Infinity, duration: 1.2 }} aria-hidden />
+            <motion.span className="h-2 w-2 shrink-0 rounded-full" style={{ background: DANGER }} animate={{ opacity: [1, 0.3, 1] }} transition={{ repeat: Infinity, duration: 1.2 }} aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[15px]" style={{ color: C.label }}>{voice.state === "starting" ? "Starting mic…" : "Listening…"}</span>
             <Level level={voice.level} />
             <span className="shrink-0 text-[13px]" style={{ color: C.secondary, fontVariantNumeric: "tabular-nums" }} aria-label={`${Math.floor(voice.seconds)} of ${MAX_VOICE_SECONDS} seconds`}>{clock(voice.seconds)} / {clock(MAX_VOICE_SECONDS)}</span>
             <motion.button type="button" aria-label="Stop and send voice message" autoFocus disabled={voice.state !== "recording"} whileTap={{ scale: 0.92 }}
               onClick={() => { const out = voice.stop(); if (out) void sendVoice(out.audio, out.seconds); }}
-              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-white disabled:opacity-50" style={{ background: C.red }}><IStop size={12} /></motion.button>
+              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-white disabled:opacity-50" style={{ background: DANGER }}><IStop size={12} /></motion.button>
           </div>
         ) : (
           <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="flex items-end gap-1.5 bg-white focus-within:ring-2" style={{ borderRadius: 22, padding: "6px 6px 6px 16px", boxShadow: cardShadow, ["--tw-ring-color" as string]: "rgba(0,122,255,0.35)" }}>
@@ -317,7 +317,7 @@ function Level({ level }: { level: number }) {
   return (
     <span className="flex h-6 items-center gap-[3px]" aria-hidden>
       {[0.45, 0.75, 1, 0.75, 0.45].map((w, i) => (
-        <motion.span key={i} className="w-[3px] rounded-full" style={{ background: C.red }} animate={{ height: 4 + 18 * Math.min(1, level * w * 1.4) }} transition={{ duration: 0.08 }} />
+        <motion.span key={i} className="w-[3px] rounded-full" style={{ background: DANGER }} animate={{ height: 4 + 18 * Math.min(1, level * w * 1.4) }} transition={{ duration: 0.08 }} />
       ))}
     </span>
   );

@@ -8,7 +8,7 @@ import { priceProtection } from "./handoff";
 import { ReceiptCard } from "./ReceiptCard";
 import { deriveTimeline } from "./timeline";
 import { useAttemptAnnouncements } from "./useAttemptAnnouncements";
-import { LINK } from "./tokens";
+import { DANGER, LINK } from "./tokens";
 
 const PAYMENT: Record<PaymentStatus, string> = { NONE: "Not paid", INITIATED: "Payment pending", PAID: "Paid", FAILED: "Payment failed" };
 
@@ -60,7 +60,7 @@ export function OrderDetail({ order: o, now, full = false, onOpen }: { order: Or
         className="bg-white" style={{ borderRadius: 22, padding: 18, boxShadow: cardShadow }}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[13px] font-medium" style={{ color: sum.tone === "bad" ? C.red : C.secondary }}>
+            <p className="text-[13px] font-medium" style={{ color: sum.tone === "bad" ? DANGER : C.secondary }}>
               {o.paymentStatus === "PAID" ? (o.settled ? "Delivered and settled" : `${sum.label} · paid by UPI`) : sum.label}
             </p>
             <Money value={o.grandTotalPaise} className="mt-1 block text-[34px] font-bold leading-none tracking-[-0.03em]" style={{ color: C.label }} />
@@ -134,7 +134,7 @@ function SubRow({ sub, now, first, full }: { sub: SubOrderView; now: number; fir
       <div className="relative mt-1.5 flex min-h-[22px] items-center gap-2 text-[13px] font-medium">
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span key={sub.status + (cur?.id ?? "")} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={ease} className="flex items-center gap-1.5"
-            style={{ color: lost ? C.red : sub.status === "DELIVERED" ? C.green : sub.status === "DISPATCHING" ? C.secondary : C.label }}>
+            style={{ color: lost ? DANGER : sub.status === "DELIVERED" ? C.green : sub.status === "DISPATCHING" ? C.secondary : C.label }}>
             {sub.status === "DELIVERED" ? <CheckDraw size={15} /> : sub.status === "DISPATCHING" ? <Spinner size={13} /> : null}
             {statusText}
           </motion.span>
@@ -178,8 +178,8 @@ function SubRow({ sub, now, first, full }: { sub: SubOrderView; now: number; fir
             {open && (
               <motion.ol id={`steps-${sub.id}`} aria-label="Progress" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={soft} className="overflow-hidden">
                 {deriveTimeline(sub).map((s) => (
-                  <li key={s.key} className="flex items-center gap-2.5 py-1 text-[13px]" style={{ color: s.state === "pending" ? C.tertiary : s.state === "failed" ? C.red : C.label, fontWeight: s.state === "active" ? 600 : 400 }}>
-                    <span className="h-[7px] w-[7px] shrink-0 rounded-full" aria-hidden style={{ background: s.state === "done" ? C.green : s.state === "failed" ? C.red : s.state === "active" ? C.orange : "#D1D1D6" }} />
+                  <li key={s.key} className="flex items-center gap-2.5 py-1 text-[13px]" style={{ color: s.state === "pending" ? C.tertiary : s.state === "failed" ? DANGER : C.label, fontWeight: s.state === "active" ? 600 : 400 }}>
+                    <span className="h-[7px] w-[7px] shrink-0 rounded-full" aria-hidden style={{ background: s.state === "done" ? C.green : s.state === "failed" ? DANGER : s.state === "active" ? C.orange : "#D1D1D6" }} />
                     {s.label}
                     <span className="sr-only"> ({s.state === "pending" ? "not started" : s.state === "active" ? "in progress" : s.state})</span>
                   </li>
