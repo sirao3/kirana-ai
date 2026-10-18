@@ -46,9 +46,9 @@ const BUTTON_DISABLED: Record<ButtonVariant, string> = {
   "danger-outlined": "disabled:border-on-surface/12",
 };
 const SIZE = {
-  sm: "h-8 px-3 gap-1.5 type-label-large",
-  md: "h-10 px-6 gap-2 type-label-large",
-  lg: "h-14 px-8 gap-2.5 type-title-medium",
+  sm: "min-h-8 px-3 gap-1.5 type-label-large",
+  md: "min-h-10 px-6 gap-2 type-label-large",
+  lg: "min-h-14 px-8 gap-2.5 type-title-medium",
 } as const;
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -192,7 +192,7 @@ const TONE_CONTAINER: Record<Tone, string> = {
 /** Non-interactive status label. Always carries text (and usually an icon), never colour alone. */
 export function StatusLabel({ tone = "neutral", icon, children, className }: { tone?: Tone; icon?: string; children: ReactNode; className?: string }) {
   return (
-    <span className={cx("inline-flex h-7 shrink-0 items-center gap-1 rounded-sm px-2 type-label-medium whitespace-nowrap", TONE_CONTAINER[tone], className)}>
+    <span className={cx("inline-flex min-h-7 shrink-0 items-center gap-1 rounded-sm px-2 type-label-medium whitespace-nowrap", TONE_CONTAINER[tone], className)}>
       {icon && <Icon name={icon} size={16} />}
       {children}
     </span>

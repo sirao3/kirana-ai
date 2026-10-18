@@ -56,6 +56,7 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
 
   return (
     <section aria-labelledby="basket-title" className="flex flex-col">
+      <div role="status" aria-live="polite" className="sr-only">{q ? `Verified quote total ${formatINR(q.grandTotalPaise)}.` : ""}</div>
       <header className="flex items-center justify-between gap-2 pb-3">
         <h2 id="basket-title" className="type-title-large text-on-surface">
           Basket{basket.itemCount > 0 && <span className="text-on-surface-variant"> · {basket.itemCount}</span>}

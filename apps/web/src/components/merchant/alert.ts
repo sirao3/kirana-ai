@@ -146,6 +146,8 @@ function setFavicon(href: string | null): void {
 
 function vibrate(): void {
   try {
+    // Chrome blocks (and logs an error for) vibrate before the first tap on the page.
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     navigator.vibrate?.([200, 100, 200]);
   } catch {
     // unsupported

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OrderView, PaymentStatus, SubOrderStatus, SubOrderView } from "@kiranaai/shared";
 import { formatINR, itemsLabel } from "../../lib/format";
 import { useMedia } from "../../lib/useMedia";
@@ -64,8 +64,8 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
           <Icon name="storefront" />
         </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate type-title-medium text-on-surface">{store}</h3>
+        <div className="min-w-[7rem] flex-1">
+          <h3 className="break-words type-title-medium text-on-surface">{store}</h3>
           <p className="type-body-medium text-on-surface-variant">{formatINR(sub.approvedAmountPaise)} · {itemsLabel(sub.lines.reduce((n, l) => n + l.qty, 0))}</p>
         </div>
         <StatusLabel tone={st.tone} icon={st.icon}>{st.label}</StatusLabel>
@@ -90,8 +90,8 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
 
         <div>
         {!roomy && (
-          <div className="mb-2 flex items-center gap-2">
-            <p className="min-w-0 flex-1 type-body-medium text-on-surface">{!open && <>Now: {current.label}</>}</p>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <p className="min-w-[8rem] flex-1 type-body-medium text-on-surface">{!open && <>Now: {current.label}</>}</p>
             <Button variant="text" icon={open ? "expand_less" : "expand_more"} aria-expanded={open} aria-controls={`steps-${sub.id}`} onClick={() => setOpen((v) => !v)}>
               {open ? "Hide steps" : "Show all steps"}
             </Button>
@@ -124,13 +124,30 @@ function SubOrderCard({ sub }: { sub: SubOrderView }) {
   );
 }
 
+/** Polite text for payment / overall status changes after first load (store handoffs are handled by useAttemptAnnouncements). */
+function useStatusAnnouncement(o: OrderView): string {
+  const prev = useRef<{ pay: PaymentStatus; label: string } | undefined>(undefined);
+  const [said, setSaid] = useState("");
+  const label = orderSummary(o).label;
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = { pay: o.paymentStatus, label };
+    if (!before || o.settled) return; // first load is silent; "Order settled" has its own status region
+    if (before.pay !== o.paymentStatus) setSaid(`Payment status: ${PAYMENT[o.paymentStatus].label}.`);
+    else if (before.label !== label) setSaid(`Order status: ${label}.`);
+  }, [o.paymentStatus, o.settled, label]);
+  return said;
+}
+
 /** Customer order detail: payment status (separate from fulfilment) + one live timeline per store. */
 export function OrderDetail({ order: o }: { order: OrderView }) {
   const pay = PAYMENT[o.paymentStatus];
   const said = useAttemptAnnouncements(o);
+  const statusSaid = useStatusAnnouncement(o);
   return (
     <div className="space-y-4">
       <div role="status" aria-live="polite" className="sr-only">{said}</div>
+      <div role="status" aria-live="polite" className="sr-only">{statusSaid}</div>
       {o.settled && (
         // Expressive moment: the end of the journey.
         <section role="status" className="flex items-center gap-4 rounded-xl bg-primary-container p-5 text-on-primary-container">
