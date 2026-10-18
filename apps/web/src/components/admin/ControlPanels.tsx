@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { paiseToRupees, rupeesToPaise } from "@kiranaai/shared";
 import { api, ApiError } from "../../lib/api";
 import { useLive } from "../../lib/live";
-import { Badge, Button, Card } from "../kit";
+import { Button, Card, CircularProgress, Dialog, InlineMessage, SectionHeader, StatusLabel, Switch, TextField, useSnackbar } from "../m3";
 
 export interface AdminConfig {
   offerWindowSeconds: number;
@@ -20,115 +20,181 @@ interface Fault {
 
 const msg = (e: unknown) => (e instanceof ApiError ? e.message : "Request failed");
 
-/** Reset & reseed, behind an in-page "are you sure" step (no browser confirm dialog). */
+/** Reset & reseed: a destructive action, so it sits in its own danger section and asks for confirmation in a dialog. */
 export function ResetPanel() {
   const qc = useQueryClient();
-  const [armed, setArmed] = useState(false);
-  const [state, setState] = useState<{ kind: "idle" | "working" | "done" | "error"; text?: string }>({ kind: "idle" });
+  const snack = useSnackbar();
+  const [confirming, setConfirming] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   async function reset() {
-    setState({ kind: "working" });
+    setWorking(true);
+    setError(null);
     try {
       await api("/admin/api/reset", { method: "POST" });
-      setState({ kind: "done", text: "Reset complete. Demo data restored; all stores are online." });
       await qc.invalidateQueries();
+      setConfirming(false);
+      snack("Reset complete. Demo data restored; all stores are online.");
     } catch (e) {
-      setState({ kind: "error", text: msg(e) });
+      setError(msg(e));
+    } finally {
+      setWorking(false);
     }
-    setArmed(false);
   }
   return (
-    <Card title="Reset & reseed">
-      <p className="mb-3 text-sm text-stone-600">Wipes every basket, order, offer, ledger entry and audit row, and restores the demo catalogue. This affects everyone using the demo.</p>
-      {!armed ? (
-        <Button tone="danger" onClick={() => { setState({ kind: "idle" }); setArmed(true); }}>Reset & reseed…</Button>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
-          <span className="text-sm font-medium text-rose-900">Are you sure? All current demo data will be deleted.</span>
-          <Button tone="danger" onClick={() => void reset()} disabled={state.kind === "working"}>Yes, wipe and reseed</Button>
-          <Button tone="secondary" onClick={() => setArmed(false)}>Cancel</Button>
-        </div>
-      )}
-      {state.kind === "working" && <p className="mt-2 text-sm text-stone-500">Resetting…</p>}
-      {state.text && <p className={`mt-2 text-sm ${state.kind === "error" ? "text-rose-700" : "text-emerald-700"}`}>{state.text}</p>}
+    <Card variant="outlined" className="border-error/50 p-4 sm:p-6">
+      <SectionHeader
+        title="Reset & reseed"
+        subtitle="Wipes every basket, order, offer, ledger entry and audit row, and restores the demo catalogue. Affects everyone using the demo."
+        actions={<Button variant="danger-outlined" icon="restart_alt" onClick={() => { setError(null); setConfirming(true); }}>Reset & reseed…</Button>}
+      />
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        dismissible={!working}
+        icon="warning"
+        title="Wipe all demo data?"
+        actions={
+          <>
+            <Button variant="text" disabled={working} onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button variant="danger" icon="delete_forever" loading={working} onClick={() => void reset()}>Wipe and reseed</Button>
+          </>
+        }
+      >
+        <p>All baskets, orders, payments, ledger entries and audit rows are deleted and the seed catalogue is restored. This can't be undone.</p>
+        {error && <InlineMessage tone="error" className="mt-3">{error}</InlineMessage>}
+      </Dialog>
     </Card>
   );
 }
 
-/** Offer window, fail-next-payment, platform fee and commission (bap.config). */
+/** Run settings: offer window, fee and commission save together (transactional); fail-next-payment is an immediate switch. */
 export function ConfigPanel() {
   const qc = useQueryClient();
+  const snack = useSnackbar();
   const q = useQuery<AdminConfig>({ queryKey: ["admin-config"], queryFn: () => api("/admin/api/config") });
-  const [draft, setDraft] = useState<{ window?: string; fee?: string; bps?: string }>({});
-  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [draft, setDraft] = useState<{ window?: string; fee?: string; pct?: string }>({});
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function patch(body: Partial<AdminConfig>, okText: string) {
+    setError(null);
     try {
       const next = await api<AdminConfig>("/admin/api/config", { method: "PATCH", json: body });
       qc.setQueryData(["admin-config"], next);
-      setDraft({});
-      setNote({ ok: true, text: okText });
+      snack(okText);
+      return true;
     } catch (e) {
-      setNote({ ok: false, text: msg(e) });
+      setError(msg(e));
+      return false;
     }
   }
-  if (!q.data) return <Card title="Run settings"><p className="text-sm text-stone-500">Loading…</p></Card>;
+
+  if (!q.data) {
+    return (
+      <Card variant="outlined" className="p-6">
+        {q.isError ? <InlineMessage tone="error">Could not load settings.</InlineMessage> : <div className="flex items-center gap-3 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading settings…</div>}
+      </Card>
+    );
+  }
   const c = q.data;
-  const input = "w-24 rounded-lg border border-stone-300 px-2 py-1.5 text-right text-sm";
+  const win = draft.window ?? String(c.offerWindowSeconds);
+  const fee = draft.fee ?? paiseToRupees(c.platformFeePaise);
+  const pct = draft.pct ?? String(c.commissionBps / 100);
+  const winErr = !/^\d+$/.test(win.trim()) || Number(win) < 1 ? "Whole seconds, 1 or more" : null;
+  const feeErr = !/^\d+(\.\d{1,2})?$/.test(fee.trim()) ? "An amount like 5 or 5.50" : null;
+  const pctErr = !(Number(pct) >= 0 && Number(pct) <= 100) || pct.trim() === "" ? "A percentage from 0 to 100" : null;
+  const dirty = Object.keys(draft).length > 0;
+
+  async function save() {
+    setSaving(true);
+    const ok = await patch(
+      { offerWindowSeconds: Number(win), platformFeePaise: rupeesToPaise(fee), commissionBps: Math.round(Number(pct) * 100) },
+      `Settings saved. Offer window ${win} s applies to the next orders.`,
+    );
+    if (ok) setDraft({});
+    setSaving(false);
+  }
+
   return (
-    <Card title="Run settings">
-      <div className="space-y-4 text-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="w-44 font-medium" htmlFor="offer-window">Offer window (seconds)</label>
-          <input id="offer-window" inputMode="numeric" className={input} value={draft.window ?? String(c.offerWindowSeconds)} onChange={(e) => setDraft({ ...draft, window: e.target.value })} />
-          <Button disabled={draft.window === undefined} onClick={() => void patch({ offerWindowSeconds: Number(draft.window) }, `Offer window set to ${draft.window} s for the next orders.`)}>Save</Button>
+    <Card variant="outlined" className="space-y-5 p-4 sm:p-6">
+      <SectionHeader title="Run settings" subtitle="Applies to new orders." />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-surface-container p-3 pl-4">
+        <div className="min-w-0">
+          <p className="type-body-large text-on-surface">Fail next payment</p>
+          <p className="type-body-small text-on-surface-variant">Clears itself after one failure.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="w-44 font-medium" htmlFor="fail-pay">Fail next payment</label>
-          <input id="fail-pay" type="checkbox" className="h-5 w-5" checked={c.failNextPayment} onChange={(e) => void patch({ failNextPayment: e.target.checked }, e.target.checked ? "The next payment will fail once." : "Payments will succeed.")} />
-          {c.failNextPayment && <Badge tone="warn">armed (clears after one failure)</Badge>}
+        <div className="flex items-center gap-2">
+          {c.failNextPayment && <StatusLabel tone="warning" icon="bolt">Armed</StatusLabel>}
+          <Switch hideLabel label="Fail next payment" checked={c.failNextPayment} onChange={(v) => void patch({ failNextPayment: v }, v ? "The next payment will fail once." : "Payments will succeed.")} />
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="w-44 font-medium" htmlFor="fee">Platform fee (₹ per basket)</label>
-          <input id="fee" inputMode="decimal" className={input} value={draft.fee ?? paiseToRupees(c.platformFeePaise)} onChange={(e) => setDraft({ ...draft, fee: e.target.value })} />
-          <Button disabled={draft.fee === undefined} onClick={() => { try { void patch({ platformFeePaise: rupeesToPaise(draft.fee!) }, "Platform fee saved."); } catch { setNote({ ok: false, text: "Enter an amount like 5 or 5.50." }); } }}>Save</Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="w-44 font-medium" htmlFor="bps">Merchant commission (%)</label>
-          <input id="bps" inputMode="decimal" className={input} value={draft.bps ?? String(c.commissionBps / 100)} onChange={(e) => setDraft({ ...draft, bps: e.target.value })} />
-          <Button disabled={draft.bps === undefined} onClick={() => void patch({ commissionBps: Math.round(Number(draft.bps) * 100) }, "Commission saved.")}>Save</Button>
-        </div>
-        {note && <p className={note.ok ? "text-emerald-700" : "text-rose-700"}>{note.text}</p>}
       </div>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <TextField label="Offer window" suffix="s" inputMode="numeric" value={win} onValueChange={(v) => setDraft({ ...draft, window: v })} error={draft.window !== undefined ? winErr : null} supportingText="Time a store has to answer" />
+          <TextField label="Platform fee per basket" prefix="₹" inputMode="decimal" value={fee} onValueChange={(v) => setDraft({ ...draft, fee: v })} error={draft.fee !== undefined ? feeErr : null} />
+          <TextField label="Merchant commission" suffix="%" inputMode="decimal" value={pct} onValueChange={(v) => setDraft({ ...draft, pct: v })} error={draft.pct !== undefined ? pctErr : null} />
+        </div>
+        {error && <InlineMessage tone="error">{error}</InlineMessage>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="text" disabled={!dirty || saving} onClick={() => setDraft({})}>Discard</Button>
+          <Button type="submit" icon="save" loading={saving} disabled={!dirty || !!(winErr || feeErr || pctErr)}>Save changes</Button>
+        </div>
+      </form>
     </Card>
   );
 }
 
-/** Per-store fault toggles (bpp.fault): auto-reject and never-answer. */
+/** Per-store fault toggles (bpp.fault): auto-reject and never-answer. Each switch applies immediately. */
 export function FaultsPanel() {
   const q = useLive<{ faults: Fault[] }>(["admin-faults"], () => api("/admin/api/faults"));
   const qc = useQueryClient();
+  const [busy, setBusy] = useState<string | null>(null);
   async function toggle(f: Fault, key: "autoReject" | "neverAnswer") {
-    await api(`/admin/api/faults/${f.storeId}`, { method: "PATCH", json: { [key]: !f[key] } });
-    await qc.invalidateQueries({ queryKey: ["admin-faults"] });
+    setBusy(`${f.storeId}-${key}`);
+    try {
+      await api(`/admin/api/faults/${f.storeId}`, { method: "PATCH", json: { [key]: !f[key] } });
+      await qc.invalidateQueries({ queryKey: ["admin-faults"] });
+    } finally {
+      setBusy(null);
+    }
   }
   return (
-    <Card title="Store faults">
-      <p className="mb-2 text-xs text-stone-500">Auto-reject: the store declines ~3 s after an offer. Never answer: the dashboard hides Accept/Reject, so the offer times out.</p>
-      <table className="w-full text-sm">
-        <thead><tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500"><th className="py-1">Store</th><th className="text-center">Auto-reject</th><th className="text-center">Never answer</th></tr></thead>
-        <tbody>
-          {q.data?.faults.map((f) => (
-            <tr key={f.storeId} className="border-b border-stone-100">
-              <td className="py-1.5">{f.storeName}</td>
-              {(["autoReject", "neverAnswer"] as const).map((k) => (
-                <td key={k} className="text-center">
-                  <input type="checkbox" className="h-5 w-5" aria-label={`${k} for ${f.storeName}`} checked={f[k]} onChange={() => void toggle(f, k)} />
-                </td>
-              ))}
+    <Card variant="outlined" className="overflow-hidden">
+      <SectionHeader
+        className="p-4 sm:px-6 sm:pt-6"
+        title="Store faults"
+        subtitle="Auto-reject: the store declines about 3 s after an offer. Never answer: the dashboard hides Accept/Reject, so the offer times out."
+      />
+      <div className="overflow-x-auto">
+        <table className="w-full type-body-medium">
+          <thead className="bg-surface-container type-title-small text-on-surface-variant">
+            <tr>
+              <th scope="col" className="px-4 py-3 text-left sm:px-6">Store</th>
+              <th scope="col" className="px-2 py-3 text-center">Auto-reject</th>
+              <th scope="col" className="px-4 py-3 text-center sm:px-6">Never answer</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {q.data?.faults.map((f) => (
+              <tr key={f.storeId} className="border-t border-outline-variant">
+                <th scope="row" className="px-4 py-1 text-left font-normal text-on-surface sm:px-6">{f.storeName}</th>
+                {(["autoReject", "neverAnswer"] as const).map((k) => (
+                  <td key={k} className="px-2 py-1 text-center">
+                    <Switch hideLabel label={`${k === "autoReject" ? "Auto-reject" : "Never answer"} for ${f.storeName}`} checked={f[k]} busy={busy === `${f.storeId}-${k}`} onChange={() => void toggle(f, k)} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

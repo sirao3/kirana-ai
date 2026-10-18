@@ -1,58 +1,108 @@
 import { useState } from "react";
 import { AuditViewer, LedgerPanel } from "../components/admin/LedgerAudit";
 import { ConfigPanel, FaultsPanel, ResetPanel } from "../components/admin/ControlPanels";
-import { Button, Card } from "../components/kit";
+import { AppShell, BrandMark, Button, Card, Icon, IconButton, InlineMessage, TextField, ThemeToggle, TopAppBar, type NavItem } from "../components/m3";
 import { api, ApiError } from "../lib/api";
 import { getSession, setSession, type Session } from "../lib/session";
 
 /** Passcode gate: exchanges the passcode for an admin token via POST /auth/persona. */
 function Gate({ onAuthed }: { onAuthed: (s: Session) => void }) {
   const [passcode, setPasscode] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setBusy(true);
     try {
       const s = await api<Session>("/auth/persona", { method: "POST", json: { role: "admin", passcode }, token: "" });
       setSession(s);
       onAuthed(s);
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 401 ? "Wrong passcode." : "Could not sign in.");
+      setError(err instanceof ApiError && err.status === 401 ? "Wrong passcode. Try again." : "Could not sign in. Is the server running?");
+    } finally {
+      setBusy(false);
     }
   }
   return (
-    <main className="mx-auto max-w-sm p-6">
-      <Card title="Admin console">
-        <form onSubmit={submit} className="space-y-3">
-          <input type="password" autoFocus aria-label="Admin passcode" placeholder="Passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2" />
-          <Button type="submit" className="w-full" disabled={!passcode}>Enter</Button>
-          {error && <p className="text-sm text-rose-700">{error}</p>}
-        </form>
-      </Card>
-    </main>
+    <div className="min-h-dvh bg-surface">
+      <TopAppBar leading={<BrandMark />} title="Admin console" actions={<ThemeToggle />} />
+      <main className="mx-auto flex max-w-md flex-col px-4 pt-10">
+        <Card variant="elevated" className="p-6">
+          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-secondary-container text-on-secondary-container">
+            <Icon name="admin_panel_settings" />
+          </span>
+          <h2 className="type-headline-small text-on-surface">Sign in</h2>
+          <p className="mb-6 mt-1 type-body-medium text-on-surface-variant">Enter the admin passcode to reset the demo, inject faults and read the ledger.</p>
+          <form onSubmit={submit} className="space-y-4">
+            <TextField
+              label="Passcode"
+              type={show ? "text" : "password"}
+              autoFocus
+              autoComplete="current-password"
+              value={passcode}
+              onValueChange={setPasscode}
+              error={error}
+              trailing={<IconButton type="button" icon={show ? "visibility_off" : "visibility"} label={show ? "Hide passcode" : "Show passcode"} onClick={() => setShow((v) => !v)} />}
+            />
+            <Button type="submit" className="w-full" icon="login" loading={busy} disabled={!passcode}>Sign in</Button>
+          </form>
+        </Card>
+      </main>
+    </div>
   );
 }
 
-/** /admin: reset & reseed, run settings, store faults, ledger, audit viewer. */
+type Dest = "controls" | "ledger" | "audit";
+const TITLES: Record<Dest, string> = { controls: "Controls", ledger: "Ledger", audit: "Audit" };
+
+/** /admin: Controls (settings, faults, reset), Ledger, Audit, as navigation destinations. */
 export function Admin() {
   const [session, setLocal] = useState<Session | null>(() => {
     const s = getSession();
     return s?.role === "admin" ? s : null;
   });
+  const [dest, setDest] = useState<Dest>("controls");
   if (!session) return <Gate onAuthed={setLocal} />;
+  const nav: NavItem[] = [
+    { key: "controls", label: "Controls", icon: "tune", onSelect: () => setDest("controls") },
+    { key: "ledger", label: "Ledger", icon: "account_balance", onSelect: () => setDest("ledger") },
+    { key: "audit", label: "Audit", icon: "fact_check", onSelect: () => setDest("audit") },
+  ];
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-4">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Admin console</h1>
-        <Button tone="ghost" onClick={() => { setSession(null); setLocal(null); }}>Sign out</Button>
-      </header>
-      <ResetPanel />
-      <div className="grid gap-4 md:grid-cols-2">
-        <ConfigPanel />
-        <FaultsPanel />
+    <AppShell
+      nav={nav}
+      active={dest}
+      navLabel="Admin"
+      topBar={
+        <TopAppBar
+          leading={<BrandMark />}
+          title={TITLES[dest]}
+          subtitle="Admin console"
+          actions={
+            <>
+              <ThemeToggle />
+              <IconButton icon="logout" label="Sign out" onClick={() => { setSession(null); setLocal(null); }} />
+            </>
+          }
+        />
+      }
+    >
+      <div className="mx-auto w-full max-w-[1200px] flex-1 space-y-4 px-4 pb-8 sm:px-6">
+        {dest === "controls" && (
+          <>
+            <InlineMessage tone="info" live={false}>Changes here affect everyone using the demo right now.</InlineMessage>
+            <div className="grid items-start gap-4 md:grid-cols-2">
+              <ConfigPanel />
+              <FaultsPanel />
+            </div>
+            <ResetPanel />
+          </>
+        )}
+        {dest === "ledger" && <LedgerPanel />}
+        {dest === "audit" && <AuditViewer />}
       </div>
-      <LedgerPanel />
-      <AuditViewer />
-    </main>
+    </AppShell>
   );
 }

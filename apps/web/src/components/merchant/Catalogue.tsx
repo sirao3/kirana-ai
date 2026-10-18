@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { paiseToRupees, rupeesToPaise } from "@kiranaai/shared";
 import { api, ApiError } from "../../lib/api";
-import { Badge, Button, Card } from "../kit";
+import {
+  Button, CellField, CircularProgress, Dialog, EmptyState, InlineMessage, SegmentedButton, SelectField, StatusLabel, Switch, TextField, useSnackbar,
+} from "../m3";
 import { CsvImport } from "./CsvImport";
 import type { Catalogue as CatalogueData, CatalogueItem } from "./types";
 
@@ -25,9 +27,12 @@ function EditCell({ value, label, onSave, money }: { value: string; label: strin
     setDraft(null);
   }
   return (
-    <input
-      aria-label={label}
+    <CellField
+      label={label}
+      prefix={money ? "₹" : undefined}
+      state={state}
       inputMode={money ? "decimal" : "numeric"}
+      className="w-24"
       value={draft ?? value}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -35,27 +40,36 @@ function EditCell({ value, label, onSave, money }: { value: string; label: strin
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setDraft(null);
       }}
-      className={`w-20 rounded border px-2 py-1 text-right text-sm tabular-nums ${state === "error" ? "border-rose-400 bg-rose-50" : "border-stone-300 bg-white"} ${state === "saving" ? "opacity-60" : ""}`}
     />
   );
 }
 
-function AddProduct({ storeId, token, data, onDone }: { storeId: string; token: string; data: CatalogueData; onDone: () => void }) {
+const EMPTY_NEW = { brand: "", name: "", variant: "", packSize: "", unit: "g" as (typeof UNITS)[number], category: "", gtin: "" };
+
+/** Add-product dialog: list an existing catalogue product, or create a new one. */
+function AddProductDialog({ open, onClose, storeId, token, data, onDone }: { open: boolean; onClose: () => void; storeId: string; token: string; data: CatalogueData; onDone: () => void }) {
+  const snack = useSnackbar();
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [pick, setPick] = useState("");
-  const [np, setNp] = useState({ brand: "", name: "", variant: "", packSize: "", unit: "g" as (typeof UNITS)[number], category: "", gtin: "" });
+  const [np, setNp] = useState(EMPTY_NEW);
   const [price, setPrice] = useState("");
   const [mrp, setMrp] = useState("");
   const [stock, setStock] = useState("");
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const listed = useMemo(() => new Set(data.items.map((i) => i.canonicalProductId)), [data.items]);
   const options = data.canonicalProducts.filter((p) => !listed.has(p.id));
   const categories = useMemo(() => [...new Set(data.canonicalProducts.map((p) => p.category))], [data.canonicalProducts]);
 
+  function reset() {
+    setPick(""); setPrice(""); setMrp(""); setStock(""); setNp(EMPTY_NEW); setError(null);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
+    setError(null);
+    setBusy(true);
     try {
       const pricePaise = rupeesToPaise(price);
       const body = {
@@ -67,61 +81,74 @@ function AddProduct({ storeId, token, data, onDone }: { storeId: string; token: 
           : { newProduct: { ...np, packSize: Number(np.packSize), variant: np.variant || null, gtin: np.gtin || null } }),
       };
       await api(`/bpp/merchant/${storeId}/catalogue`, { method: "POST", token, json: body });
-      setMsg({ ok: true, text: "Added. It is now searchable." });
-      setPick(""); setPrice(""); setMrp(""); setStock("");
-      setNp({ brand: "", name: "", variant: "", packSize: "", unit: "g", category: "", gtin: "" });
+      snack("Product added. It is now searchable.");
+      reset();
       onDone();
+      onClose();
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof ApiError ? err.message : "Enter valid prices (like 125.50) and a whole-number stock." });
+      setError(err instanceof ApiError ? err.message : "Enter valid prices (like 125.50) and a whole-number stock.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  const field = "w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm";
+  const set = (k: keyof typeof EMPTY_NEW) => (v: string) => setNp({ ...np, [k]: v });
   return (
-    <Card title="Add a product">
-      <form onSubmit={submit} className="space-y-3">
-        <div className="flex gap-2 text-sm">
-          {(["existing", "new"] as const).map((m) => (
-            <label key={m} className="flex items-center gap-1">
-              <input type="radio" checked={mode === m} onChange={() => setMode(m)} />
-              {m === "existing" ? "Pick from catalogue" : "New product"}
-            </label>
-          ))}
-        </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Add a product"
+      fullScreenOnCompact
+      dismissible={!busy}
+      actions={
+        <>
+          <Button variant="text" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button type="submit" form="add-product" icon="add" loading={busy}>Add to catalogue</Button>
+        </>
+      }
+    >
+      <form id="add-product" onSubmit={submit} className="space-y-4 pt-1">
+        <SegmentedButton
+          label="Product source"
+          className="w-full"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "existing", label: "From catalogue" },
+            { value: "new", label: "New product" },
+          ]}
+        />
         {mode === "existing" ? (
-          <select aria-label="Catalogue product" required value={pick} onChange={(e) => setPick(e.target.value)} className={field}>
+          <SelectField label="Catalogue product" required value={pick} onChange={(e) => setPick(e.target.value)} supportingText={`${options.length} products you don't list yet`}>
             <option value="">Choose a product…</option>
             {options.map((p) => <option key={p.id} value={p.id}>{p.label} ({p.category})</option>)}
-          </select>
+          </SelectField>
         ) : (
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <input aria-label="Brand" required placeholder="Brand" className={field} value={np.brand} onChange={(e) => setNp({ ...np, brand: e.target.value })} />
-            <input aria-label="Product name" required placeholder="Product name" className={field} value={np.name} onChange={(e) => setNp({ ...np, name: e.target.value })} />
-            <input aria-label="Variant" placeholder="Variant (optional)" className={field} value={np.variant} onChange={(e) => setNp({ ...np, variant: e.target.value })} />
-            <input aria-label="Category" required list="categories" placeholder="Category" className={field} value={np.category} onChange={(e) => setNp({ ...np, category: e.target.value })} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField label="Brand" required value={np.brand} onValueChange={set("brand")} />
+            <TextField label="Product name" required value={np.name} onValueChange={set("name")} />
+            <TextField label="Variant (optional)" value={np.variant} onValueChange={set("variant")} />
+            <TextField label="Category" required list="categories" value={np.category} onValueChange={set("category")} />
             <datalist id="categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
-            <input aria-label="Pack size" required inputMode="numeric" placeholder="Pack size (e.g. 500)" className={field} value={np.packSize} onChange={(e) => setNp({ ...np, packSize: e.target.value })} />
-            <select aria-label="Unit" className={field} value={np.unit} onChange={(e) => setNp({ ...np, unit: e.target.value as (typeof UNITS)[number] })}>
+            <TextField label="Pack size" required inputMode="numeric" value={np.packSize} onValueChange={set("packSize")} supportingText="e.g. 500" />
+            <SelectField label="Unit" value={np.unit} onChange={(e) => setNp({ ...np, unit: e.target.value as (typeof UNITS)[number] })}>
               {UNITS.map((u) => <option key={u}>{u}</option>)}
-            </select>
-            <input aria-label="GTIN" placeholder="GTIN (optional)" className={field} value={np.gtin} onChange={(e) => setNp({ ...np, gtin: e.target.value })} />
+            </SelectField>
+            <TextField label="GTIN (optional)" className="sm:col-span-2" value={np.gtin} onValueChange={set("gtin")} />
           </div>
         )}
-        <div className="grid grid-cols-3 gap-2">
-          <input aria-label="Price" required inputMode="decimal" placeholder="Price ₹" className={field} value={price} onChange={(e) => setPrice(e.target.value)} />
-          <input aria-label="MRP" inputMode="decimal" placeholder="MRP ₹ (optional)" className={field} value={mrp} onChange={(e) => setMrp(e.target.value)} />
-          <input aria-label="Stock" required inputMode="numeric" placeholder="Stock (packs)" className={field} value={stock} onChange={(e) => setStock(e.target.value)} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <TextField label="Price" required prefix="₹" inputMode="decimal" value={price} onValueChange={setPrice} />
+          <TextField label="MRP (optional)" prefix="₹" inputMode="decimal" value={mrp} onValueChange={setMrp} />
+          <TextField label="Stock" required suffix="packs" inputMode="numeric" value={stock} onValueChange={setStock} />
         </div>
-        <div className="flex items-center gap-3">
-          <Button type="submit">Add to my catalogue</Button>
-          {msg && <span className={`text-sm ${msg.ok ? "text-emerald-700" : "text-rose-700"}`}>{msg.text}</span>}
-        </div>
+        {error && <InlineMessage tone="error">{error}</InlineMessage>}
       </form>
-    </Card>
+    </Dialog>
   );
 }
 
-/** Catalogue tab: inline price/stock edit, activate/deactivate, add product, CSV import. */
+/** Catalogue destination: filter, inline price/stock edit, active switch, add product, CSV import. */
 export function Catalogue({ storeId, token }: { storeId: string; token: string }) {
   const qc = useQueryClient();
   const key = ["catalogue", storeId];
@@ -129,6 +156,7 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
   const q = useQuery<CatalogueData>({ queryKey: key, queryFn: () => api(base, { token }) });
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<"add" | "import" | null>(null);
 
   const refresh = () => qc.invalidateQueries({ queryKey: key });
   async function patch(item: CatalogueItem, body: Record<string, unknown>) {
@@ -142,52 +170,74 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
     }
   }
 
-  if (!q.data) return <p className="text-sm text-stone-500">{q.isError ? "Could not load the catalogue." : "Loading catalogue…"}</p>;
+  if (!q.data) {
+    return q.isError ? (
+      <InlineMessage tone="error" action={<Button variant="text" onClick={() => void q.refetch()}>Retry</Button>}>Could not load the catalogue.</InlineMessage>
+    ) : (
+      <div className="flex items-center gap-3 py-8 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading catalogue…</div>
+    );
+  }
   const items = q.data.items.filter((i) => `${i.brand} ${i.name} ${i.category}`.toLowerCase().includes(filter.toLowerCase()));
+  const activeCount = q.data.items.filter((i) => i.active).length;
 
   return (
     <div className="space-y-4">
-      <AddProduct storeId={storeId} token={token} data={q.data} onDone={refresh} />
-      <CsvImport storeId={storeId} token={token} onApplied={refresh} />
-      <Card
-        title={`My catalogue (${q.data.items.length})`}
-        actions={<input aria-label="Filter catalogue" placeholder="Filter…" value={filter} onChange={(e) => setFilter(e.target.value)} className="w-40 rounded-lg border border-stone-300 px-2 py-1 text-sm" />}
-      >
-        {error && <p className="mb-2 rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-700">{error}</p>}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 text-left text-xs uppercase text-stone-500">
-                <th className="py-1 pr-2">Product</th><th className="pr-2">Pack</th><th className="pr-2 text-right">Price ₹</th><th className="pr-2 text-right">MRP ₹</th><th className="pr-2 text-right">Stock</th><th />
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.listingId} className={`border-b border-stone-100 ${i.active ? "" : "text-stone-400"}`}>
-                  <td className="py-1 pr-2">
-                    <div className="font-medium">{i.brand} {i.name}</div>
-                    <div className="text-xs text-stone-500">{i.category}{!i.active && <> · <Badge>inactive</Badge></>}</div>
-                  </td>
-                  <td className="pr-2 whitespace-nowrap">{i.packLabel}</td>
-                  <td className="pr-2 text-right">
-                    <EditCell money label={`Price for ${i.name}`} value={paiseToRupees(i.pricePaise)} onSave={(v) => patch(i, { pricePaise: rupeesToPaise(v) })} />
-                  </td>
-                  <td className="pr-2 text-right tabular-nums">{paiseToRupees(i.mrpPaise)}</td>
-                  <td className="pr-2 text-right">
-                    <EditCell label={`Stock for ${i.name}`} value={String(i.stockQty)} onSave={(v) => patch(i, { stockQty: Number(v) })} />
-                  </td>
-                  <td className="text-right">
-                    <Button tone="ghost" className="px-2 py-1 text-xs" onClick={() => void patch(i, { active: !i.active }).catch(() => {})}>
-                      {i.active ? "Deactivate" : "Activate"}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {items.length === 0 && <tr><td colSpan={6} className="py-4 text-center text-stone-500">Nothing matches.</td></tr>}
-            </tbody>
-          </table>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="type-title-large text-on-surface">My catalogue</h2>
+          <p className="type-body-medium text-on-surface-variant">{q.data.items.length} products · {activeCount} active. Prices and stock save as you leave a field.</p>
         </div>
-      </Card>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outlined" icon="upload_file" onClick={() => setDialog("import")}>Import CSV</Button>
+          <Button icon="add" onClick={() => setDialog("add")}>Add product</Button>
+        </div>
+      </div>
+
+      <TextField label="Filter products" leadingIcon="filter_list" dense className="max-w-sm" value={filter} onValueChange={setFilter} />
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
+
+      <div className="overflow-x-auto rounded-md border border-outline-variant">
+        <table className="w-full min-w-[640px] type-body-medium">
+          <thead className="bg-surface-container type-title-small text-on-surface-variant">
+            <tr className="text-left">
+              <th scope="col" className="px-4 py-3">Product</th>
+              <th scope="col" className="px-2 py-3">Pack</th>
+              <th scope="col" className="px-2 py-3 text-right">Price</th>
+              <th scope="col" className="px-2 py-3 text-right">MRP</th>
+              <th scope="col" className="px-2 py-3 text-right">Stock</th>
+              <th scope="col" className="px-4 py-3 text-right">Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((i) => (
+              <tr key={i.listingId} className="border-t border-outline-variant hover:bg-on-surface/4">
+                <td className="px-4 py-2">
+                  <p className={i.active ? "type-body-large text-on-surface" : "type-body-large text-on-surface-variant"}>{i.brand} {i.name}</p>
+                  <p className="flex items-center gap-2 type-body-small text-on-surface-variant">
+                    {i.category}
+                    {!i.active && <StatusLabel icon="visibility_off" className="h-6">Inactive</StatusLabel>}
+                  </p>
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 text-on-surface-variant">{i.packLabel}</td>
+                <td className="px-2 py-2 text-right">
+                  <EditCell money label={`Price for ${i.name}`} value={paiseToRupees(i.pricePaise)} onSave={(v) => patch(i, { pricePaise: rupeesToPaise(v) })} />
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums text-on-surface-variant">₹{paiseToRupees(i.mrpPaise)}</td>
+                <td className="px-2 py-2 text-right">
+                  <EditCell label={`Stock for ${i.name}`} value={String(i.stockQty)} onSave={(v) => patch(i, { stockQty: Number(v) })} />
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <Switch hideLabel label={`${i.name} active`} checked={i.active} onChange={(v) => void patch(i, { active: v }).catch(() => {})} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {items.length === 0 && <EmptyState icon="search_off" title="Nothing matches">Try a brand, product or category name.</EmptyState>}
+      </div>
+
+      <AddProductDialog open={dialog === "add"} onClose={() => setDialog(null)} storeId={storeId} token={token} data={q.data} onDone={refresh} />
+      <CsvImport open={dialog === "import"} onClose={() => setDialog(null)} storeId={storeId} token={token} onApplied={refresh} />
     </div>
   );
 }

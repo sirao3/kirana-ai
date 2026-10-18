@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentEvent, AgentReply } from "@kiranaai/shared";
 import { ApiError } from "../../lib/api";
 import { formatINR } from "../../lib/format";
-import { Badge, Button, Card } from "../kit";
+import { AssistChip, Button, cx, Icon, IconButton, LoadingDots, StatusLabel, SuggestionChip } from "../m3";
 import { bap } from "./bap";
 import { isAgentDown } from "./errors";
 
@@ -12,6 +12,7 @@ interface Msg {
   text: string;
   events?: AgentEvent[];
   steps?: AgentReply["steps"];
+  failed?: boolean;
 }
 
 const EXAMPLES = [
@@ -34,17 +35,45 @@ export function eventChip(e: AgentEvent): { tone: "good" | "info" | "warn"; text
   }
 }
 
-export function ChatPanel({ onEvents, onAgentDown, onUseManual }: {
+const TOOL_LABEL: Record<string, string> = {
+  search_products: "Searched stores",
+  plan_basket: "Compared stores",
+  set_basket: "Built basket",
+  update_item: "Changed quantity",
+  remove_item: "Removed item",
+  view_basket: "Read basket",
+  get_quote: "Got verified quote",
+  request_approval: "Asked for approval",
+  get_order_status: "Checked order",
+};
+
+function EventChips({ events, onOpenBasket, onReview }: { events: AgentEvent[]; onOpenBasket: () => void; onReview: () => void }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {events.map((e, i) => {
+        const c = eventChip(e);
+        if (e.type === "loose_declined") return <StatusLabel key={i} tone="warning" icon="scale" className="h-auto min-h-7 whitespace-normal py-1">{c.text}</StatusLabel>;
+        if (e.type === "basket_updated") return <AssistChip key={i} icon="shopping_basket" onClick={onOpenBasket}>{c.text}</AssistChip>;
+        return <AssistChip key={i} icon={e.type === "approval_requested" ? "lock" : "verified"} onClick={onReview}>{c.text} · Review</AssistChip>;
+      })}
+    </div>
+  );
+}
+
+export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, onReview }: {
   onEvents: (events: AgentEvent[]) => void;
   /** null clears the banner. */
   onAgentDown: (reason: "unavailable" | "rate_limited" | null) => void;
   onUseManual: () => void;
+  onOpenBasket: () => void;
+  onReview: () => void;
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [thinking, setThinking] = useState(false);
   const idRef = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +87,7 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual }: {
   }, []);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [msgs, thinking]);
 
   async function send(message: string) {
@@ -75,9 +104,10 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual }: {
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) onAgentDown("rate_limited");
       else if (isAgentDown(e)) onAgentDown("unavailable");
-      setMsgs((x) => [...x, { id: idRef.current++, role: "model", text: "I could not answer just now. You can keep shopping in the Manual tab." }]);
+      setMsgs((x) => [...x, { id: idRef.current++, role: "model", failed: true, text: "I could not answer just now. You can keep shopping with Search." }]);
     } finally {
       setThinking(false);
+      inputRef.current?.focus();
     }
   }
 
@@ -87,71 +117,114 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual }: {
   }
 
   return (
-    <Card
-      title="Assistant"
-      className="flex h-[70vh] min-h-[420px] flex-col"
-      actions={msgs.length > 0 ? <button className="text-xs text-stone-500 hover:text-stone-800" onClick={newChat}>New chat</button> : undefined}
-    >
-      <div className="-mx-1 flex-1 space-y-3 overflow-y-auto px-1" aria-live="polite">
-        {msgs.length === 0 && (
-          <div className="space-y-2 text-sm text-stone-600">
-            <p>Tell me what you need, in English or Hinglish. I will find the best stores and build one basket.</p>
-            <div className="flex flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-4" aria-live="polite" aria-busy={thinking}>
+        {msgs.length === 0 ? (
+          <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-2 pt-6 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-xl bg-tertiary-container text-on-tertiary-container">
+              <Icon name="auto_awesome" size={32} filled />
+            </span>
+            <h2 className="type-headline-small text-on-surface">What do you need this week?</h2>
+            <p className="type-body-medium text-on-surface-variant">
+              Tell me in English or Hinglish. I'll find the best nearby stores, build one basket and get a verified total for you to approve.
+            </p>
+            <div className="flex flex-col items-stretch gap-2 self-stretch" aria-label="Suggestions">
               {EXAMPLES.map((ex) => (
-                <button key={ex} className="rounded-lg border border-stone-200 px-3 py-2 text-left hover:bg-stone-50" onClick={() => send(ex)}>
+                <SuggestionChip key={ex} onClick={() => void send(ex)}>
                   {ex}
-                </button>
+                </SuggestionChip>
               ))}
             </div>
           </div>
-        )}
-        {msgs.map((m) => (
-          <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <div className={`max-w-[85%] space-y-1.5 rounded-2xl px-3 py-2 text-sm ${m.role === "user" ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-900"}`}>
-              <p className="whitespace-pre-wrap">{m.text}</p>
-              {m.events && m.events.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {m.events.map((e, i) => {
-                    const c = eventChip(e);
-                    return <Badge key={i} tone={c.tone}>{c.text}</Badge>;
-                  })}
-                </div>
-              )}
-              {m.steps && m.steps.length > 0 && (
-                <div className="text-xs text-stone-500">
-                  {m.steps.map((s) => `${s.tool}${s.ok ? "" : " ✕"}`).join(" → ")}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-        {thinking && (
-          <div className="flex justify-start">
-            <div className="animate-pulse rounded-2xl bg-stone-100 px-3 py-2 text-sm text-stone-500">thinking…</div>
-          </div>
+        ) : (
+          <ol className="space-y-4">
+            {msgs.map((m) =>
+              m.role === "user" ? (
+                <li key={m.id} className="flex justify-end">
+                  <p className="max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-xs bg-primary px-4 py-2.5 type-body-large text-on-primary">
+                    <span className="sr-only">You: </span>
+                    {m.text}
+                  </p>
+                </li>
+              ) : (
+                <li key={m.id} className="flex items-start gap-2">
+                  <span className={cx("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", m.failed ? "bg-error-container text-on-error-container" : "bg-tertiary-container text-on-tertiary-container")} aria-hidden>
+                    <Icon name={m.failed ? "error" : "auto_awesome"} size={18} filled />
+                  </span>
+                  <div className="min-w-0 max-w-[85%] space-y-2">
+                    <p className="whitespace-pre-wrap rounded-[20px] rounded-tl-xs bg-surface-container-high px-4 py-2.5 type-body-large text-on-surface">
+                      <span className="sr-only">Assistant: </span>
+                      {m.text}
+                    </p>
+                    {m.events && m.events.length > 0 && <EventChips events={m.events} onOpenBasket={onOpenBasket} onReview={onReview} />}
+                    {m.steps && m.steps.length > 0 && (
+                      <details className="group type-body-small text-on-surface-variant">
+                        <summary className="flex cursor-pointer list-none items-center gap-1 rounded-sm py-1 [&::-webkit-details-marker]:hidden">
+                          <Icon name="build" size={16} />
+                          {m.steps.length} tool call{m.steps.length === 1 ? "" : "s"}
+                          <Icon name="expand_more" size={16} className="transition-transform group-open:rotate-180" />
+                        </summary>
+                        <ol className="mt-1 space-y-0.5 border-l-2 border-outline-variant pl-3">
+                          {m.steps.map((s, i) => (
+                            <li key={i} className="flex items-center gap-1">
+                              <Icon name={s.ok ? "check" : "close"} size={14} className={s.ok ? "text-primary" : "text-error"} label={s.ok ? "succeeded" : "failed"} />
+                              {TOOL_LABEL[s.tool] ?? s.tool} <span className="font-mono opacity-70">({s.tool})</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </div>
+                </li>
+              ),
+            )}
+            {thinking && (
+              <li className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container" aria-hidden>
+                  <Icon name="auto_awesome" size={18} filled />
+                </span>
+                <span className="flex items-center gap-3 rounded-[20px] rounded-tl-xs bg-surface-container-high px-4 py-3 type-body-medium text-on-surface-variant">
+                  <LoadingDots label="Assistant is working" /> Checking stores…
+                </span>
+              </li>
+            )}
+          </ol>
         )}
         <div ref={endRef} />
       </div>
+
       <form
-        className="mt-3 flex gap-2"
+        className="flex items-end gap-2 pb-2 pt-2"
         onSubmit={(e) => {
           e.preventDefault();
           void send(text);
         }}
       >
-        <input
-          className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-          placeholder="e.g. 2 atta, 1 toor dal, milk, tea under ₹1500"
-          value={text}
-          maxLength={2000}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="Message the assistant"
-        />
-        <Button type="submit" disabled={thinking || !text.trim()}>Send</Button>
+        <div className="flex min-h-14 min-w-0 flex-1 items-center rounded-[28px] bg-surface-container-high pl-5 pr-1 focus-within:shadow-1">
+          <textarea
+            ref={inputRef}
+            rows={1}
+            className="max-h-32 min-w-0 flex-1 resize-none bg-transparent py-4 type-body-large text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:outline-none"
+            placeholder="e.g. 2 atta, toor dal, milk, tea under ₹1500"
+            value={text}
+            maxLength={2000}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send(text);
+              }
+            }}
+            aria-label="Message the assistant"
+          />
+          {msgs.length > 0 && <IconButton icon="edit_square" label="New chat" type="button" disabled={thinking} onClick={() => void newChat()} />}
+        </div>
+        <IconButton icon="send" label="Send" variant="filled" size={48} type="submit" disabled={thinking || !text.trim()} />
       </form>
-      <button className="mt-2 self-start text-xs text-stone-500 underline md:hidden" onClick={onUseManual}>
-        Prefer to search yourself? Manual mode
-      </button>
-    </Card>
+      <p className="flex flex-wrap items-center gap-x-1 pb-2 type-body-small text-on-surface-variant">
+        The assistant builds your basket; only you can approve and pay.
+        <Button variant="text" size="sm" className="-ml-1" onClick={onUseManual}>Prefer to search yourself?</Button>
+      </p>
+    </div>
   );
 }

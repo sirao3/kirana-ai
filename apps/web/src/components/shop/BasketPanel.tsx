@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { BasketView } from "@kiranaai/shared";
-import { Badge, Button, Card } from "../kit";
+import type { BasketView, QuoteLineView, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
+import { Button, Countdown, EmptyState, Icon, IconButton, InlineMessage, QtyStepper, StatusLabel } from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
 
@@ -9,94 +10,137 @@ export function quoteIsLive(b: BasketView): boolean {
   return b.status === "QUOTED" && !!b.quote && !b.quote.expired && new Date(b.quote.validUntil).getTime() > Date.now();
 }
 
-/** Basket grouped by store: qty steppers, remove, delivery per store, catalogue/verified badges. */
-export function BasketPanel({ basket, onCheckout, checkingOut, error }: {
+function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={strong ? "flex items-baseline justify-between pt-2 type-title-large text-on-surface" : "flex justify-between type-body-medium text-on-surface-variant"}>
+      <span>{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Basket grouped by store with quantity steppers. Once quoted, the same view shows verified prices,
+ * per-store delivery, platform fee and the grand total with its validity countdown.
+ */
+export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteErrors }: {
   basket: BasketView;
   onCheckout: () => void;
   checkingOut: boolean;
   error: string | null;
+  quoteErrors: StoreQuoteError[];
 }) {
   const qc = useQueryClient();
-  const live = quoteIsLive(basket);
+  const [expiredNow, setExpiredNow] = useState<string | null>(null);
+  const live = quoteIsLive(basket) && expiredNow !== basket.quote?.id;
   const edit = useMutation({
     mutationFn: (op: { kind: "qty"; listingId: string; qty: number } | { kind: "remove"; listingId: string }) =>
       op.kind === "qty" ? bap.setQty(op.listingId, op.qty) : bap.remove(op.listingId),
     onSuccess: (b) => qc.setQueryData(["basket"], b),
   });
-  const quoteStore = (storeId: string) => (live ? basket.quote?.stores.find((s) => s.storeId === storeId) : undefined);
+  const q = live ? basket.quote! : null;
+  const quoteStore = (storeId: string) => q?.stores.find((s) => s.storeId === storeId);
+  const quoteLine = (storeId: string, listingId: string): QuoteLineView | undefined => quoteStore(storeId)?.lines.find((l) => l.listingId === listingId);
+  const subtotal = basket.stores.reduce((s, g) => s + g.itemsTotalPaise, 0);
 
   return (
-    <Card
-      title={`Basket${basket.itemCount ? ` (${basket.itemCount})` : ""}`}
-      actions={<Badge tone={live ? "good" : "neutral"}>{live ? "verified" : "catalogue"}</Badge>}
-    >
+    <section aria-labelledby="basket-title" className="flex flex-col">
+      <header className="flex items-center justify-between gap-2 pb-3">
+        <h2 id="basket-title" className="type-title-large text-on-surface">
+          Basket{basket.itemCount > 0 && <span className="text-on-surface-variant"> · {basket.itemCount}</span>}
+        </h2>
+        {basket.itemCount > 0 &&
+          (live ? (
+            <StatusLabel tone="success" icon="verified">Verified prices</StatusLabel>
+          ) : (
+            <StatusLabel icon="sell">Catalogue prices</StatusLabel>
+          ))}
+      </header>
+
       {basket.stores.length === 0 ? (
-        <p className="text-sm text-stone-500">Your basket is empty. Ask the assistant, or search in the Manual tab.</p>
+        <EmptyState icon="shopping_basket" title="Your basket is empty">
+          Ask the assistant for your weekly list, or search for products and add them here.
+        </EmptyState>
       ) : (
         <div className="space-y-4">
+          {quoteErrors.length > 0 && (
+            <InlineMessage tone="error" title="Some stores could not confirm your items">
+              <ul className="mt-1 space-y-0.5">
+                {quoteErrors.map((e) => (
+                  <li key={`${e.storeId}-${e.code}`}>
+                    <b>{e.storeName}</b>: {e.message || e.code}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1">Remove or change the affected items, then get the quote again.</p>
+            </InlineMessage>
+          )}
+
           {basket.stores.map((s) => {
-            const q = quoteStore(s.storeId);
+            const qs = quoteStore(s.storeId);
             return (
-              <div key={s.storeId} className="rounded-lg border border-stone-200">
-                <div className="flex items-center justify-between gap-2 border-b border-stone-200 bg-stone-50 px-3 py-2">
-                  <span className="font-medium">{s.storeName}</span>
-                  <span className="text-xs text-stone-600">
-                    {q ? `Delivery ${q.deliveryPaise ? formatINR(q.deliveryPaise) : "free"}` : "Delivery shown at quote"}
+              <div key={s.storeId} className="overflow-hidden rounded-md bg-surface-container-lowest">
+                <div className="flex items-center gap-3 px-4 pb-1 pt-3">
+                  <Icon name="storefront" size={20} className="text-primary" />
+                  <span className="min-w-0 flex-1 truncate type-title-small text-on-surface">{s.storeName}</span>
+                  <span className="type-body-small text-on-surface-variant">
+                    {qs ? (qs.deliveryPaise ? `Delivery ${formatINR(qs.deliveryPaise)}` : "Free delivery") : "Delivery at quote"}
                   </span>
                 </div>
-                <ul className="divide-y divide-stone-100">
-                  {s.items.map((i) => (
-                    <li key={i.listingId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm">{i.name}</div>
-                        <div className="text-xs text-stone-500">{formatINR(i.seenPricePaise)} each</div>
-                      </div>
-                      <div className="flex items-center gap-1" aria-label={`Quantity of ${i.name}`}>
-                        <button
-                          className="h-7 w-7 rounded border border-stone-300 text-lg leading-none disabled:opacity-40"
-                          disabled={i.qty <= 1 || edit.isPending}
-                          onClick={() => edit.mutate({ kind: "qty", listingId: i.listingId, qty: i.qty - 1 })}
-                          aria-label="Decrease"
-                        >
-                          −
-                        </button>
-                        <span className="w-6 text-center tabular-nums">{i.qty}</span>
-                        <button
-                          className="h-7 w-7 rounded border border-stone-300 text-lg leading-none disabled:opacity-40"
-                          disabled={edit.isPending}
-                          onClick={() => edit.mutate({ kind: "qty", listingId: i.listingId, qty: i.qty + 1 })}
-                          aria-label="Increase"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <div className="w-16 text-right text-sm tabular-nums">{formatINR(i.lineTotalPaise)}</div>
-                      <button
-                        className="text-stone-400 hover:text-rose-600"
-                        onClick={() => edit.mutate({ kind: "remove", listingId: i.listingId })}
-                        aria-label={`Remove ${i.name}`}
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
+                <ul>
+                  {s.items.map((i) => {
+                    const ql = quoteLine(s.storeId, i.listingId);
+                    return (
+                      <li key={i.listingId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+                        <div className="min-w-0 basis-full">
+                          <p className={ql && !ql.available ? "type-body-large text-error line-through" : "type-body-large text-on-surface"}>{i.name}</p>
+                          <p className="type-body-small text-on-surface-variant">{formatINR(ql?.unitPricePaise ?? i.seenPricePaise)} each</p>
+                          {ql?.priceChanged && (
+                            <StatusLabel tone="warning" icon="trending_flat" className="mt-1">
+                              Price changed {formatINR(ql.seenPricePaise)} → {formatINR(ql.unitPricePaise)}
+                            </StatusLabel>
+                          )}
+                          {ql && !ql.available && <StatusLabel tone="error" icon="block" className="mt-1">Unavailable</StatusLabel>}
+                        </div>
+                        <QtyStepper label={`Quantity of ${i.name}`} value={i.qty} disabled={edit.isPending} onChange={(qty) => edit.mutate({ kind: "qty", listingId: i.listingId, qty })} />
+                        <span className="ml-auto w-16 text-right type-label-large tabular-nums text-on-surface">{formatINR(ql?.lineTotalPaise ?? i.lineTotalPaise)}</span>
+                        <IconButton icon="delete" label={`Remove ${i.name}`} size={32} disabled={edit.isPending} onClick={() => edit.mutate({ kind: "remove", listingId: i.listingId })} />
+                      </li>
+                    );
+                  })}
                 </ul>
-                <div className="flex justify-between px-3 py-2 text-sm text-stone-600">
-                  <span>Items</span>
-                  <span className="tabular-nums">{formatINR(s.itemsTotalPaise)}</span>
-                </div>
               </div>
             );
           })}
-          {(edit.error || error) && <p role="alert" className="text-sm text-rose-700">{error ?? errorMessage(edit.error)}</p>}
-          <Button className="w-full" disabled={checkingOut || edit.isPending} onClick={onCheckout}>
-            {checkingOut ? "Getting verified prices…" : live ? "Checkout" : "Get verified quote"}
+
+          <div className="space-y-1 px-1">
+            {q ? (
+              <>
+                <SummaryRow label="Items" value={formatINR(q.itemsTotalPaise)} />
+                <SummaryRow label="Delivery" value={q.deliveryTotalPaise ? formatINR(q.deliveryTotalPaise) : "Free"} />
+                <SummaryRow label="Platform fee" value={formatINR(q.platformFeePaise)} />
+                <SummaryRow strong label="Total" value={formatINR(q.grandTotalPaise)} />
+                <p className="flex items-center gap-1 type-body-small text-on-surface-variant">
+                  <Icon name="schedule" size={16} /> Price held for <Countdown until={q.validUntil} onDone={() => setExpiredNow(q.id)} />
+                </p>
+              </>
+            ) : (
+              <>
+                <SummaryRow strong label="Subtotal" value={formatINR(subtotal)} />
+                <p className="type-body-small text-on-surface-variant">
+                  Catalogue prices seen at search. Getting a quote asks every store to confirm price, stock and delivery.
+                </p>
+              </>
+            )}
+          </div>
+
+          {(edit.error || error) && <InlineMessage tone="error">{error ?? errorMessage(edit.error)}</InlineMessage>}
+
+          <Button className="w-full" icon={live ? "lock" : "verified"} loading={checkingOut} disabled={edit.isPending} onClick={onCheckout}>
+            {checkingOut ? "Checking with stores…" : live ? `Review and pay ${formatINR(q!.grandTotalPaise)}` : "Get verified quote"}
           </Button>
-          <p className="text-xs text-stone-500">
-            Prices here are catalogue prices seen at search. The quote re-checks every store and gives the final total.
-          </p>
         </div>
       )}
-    </Card>
+    </section>
   );
 }

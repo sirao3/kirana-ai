@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { PlanResult, SearchResponse } from "@kiranaai/shared";
+import type { BasketView, PlanResult, SearchResponse } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
-import { Badge, Button, Card } from "../kit";
+import {
+  Button, Card, CircularProgress, EmptyState, Icon, IconButton, InlineMessage, InputChip, QtyStepper, SearchBar, StatusLabel, TextField, useSnackbar,
+} from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
 
@@ -11,20 +13,27 @@ interface Need {
   qty: number;
 }
 
-/** Manual mode (works without the assistant): search → grouped results → Add; shopping list → Optimise. */
-export function ManualPanel({ basketItemIds }: { basketItemIds: Set<string> }) {
+const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
+
+/** Manual mode (works without the assistant): search → offers per product → Add; shopping list → optimiser. */
+export function ManualPanel({ basketItemIds, onOpenBasket }: { basketItemIds: Set<string>; onOpenBasket: () => void }) {
   const qc = useQueryClient();
+  const snack = useSnackbar();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
-  const [needs, setNeeds] = useState<Need[]>([]);
+  const [needText, setNeedText] = useState("");
   const [needQty, setNeedQty] = useState(1);
+  const [needs, setNeeds] = useState<Need[]>([]);
   const [plan, setPlan] = useState<PlanResult | null>(null);
   const [budget, setBudget] = useState("");
 
   const search = useMutation({ mutationFn: (text: string) => bap.search(text), onSuccess: setResults });
   const add = useMutation({
-    mutationFn: (listingId: string) => bap.addItem(listingId, 1),
-    onSuccess: (b) => qc.setQueryData(["basket"], b),
+    mutationFn: (v: { listingId: string; label: string }) => bap.addItem(v.listingId, 1),
+    onSuccess: (b: BasketView, v) => {
+      qc.setQueryData(["basket"], b);
+      snack(`Added ${v.label}`, { label: "View basket", onClick: onOpenBasket });
+    },
   });
   const optimise = useMutation({
     mutationFn: async () => {
@@ -42,118 +51,196 @@ export function ManualPanel({ basketItemIds }: { basketItemIds: Set<string> }) {
   });
 
   function addNeed() {
-    const query = q.trim();
+    const query = needText.trim();
     if (!query) return;
     setNeeds((n) => [...n, { query, qty: needQty }]);
+    setNeedText("");
+    setNeedQty(1);
   }
 
+  const budgetInvalid = budget.trim() !== "" && !(Number(budget) > 0);
+
   return (
-    <div className="space-y-4">
-      <Card title="Search stores">
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (q.trim()) search.mutate(q.trim());
-          }}
-        >
-          <input
-            className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            placeholder="atta, gehun ka aata, toor dal, milk…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            aria-label="Search products"
-          />
-          <Button type="submit" disabled={search.isPending || !q.trim()}>{search.isPending ? "Searching…" : "Search"}</Button>
-        </form>
-        {search.error && <p role="alert" className="mt-2 text-sm text-rose-700">{errorMessage(search.error)}</p>}
+    <div className="space-y-8 py-4">
+      {/* ---- Find a product ---- */}
+      <section aria-labelledby="find-title" className="space-y-4">
+        <div>
+          <h2 id="find-title" className="type-title-medium text-on-surface">Find a product</h2>
+          <p className="type-body-medium text-on-surface-variant">Compare the same pack across nearby stores. Cheapest first.</p>
+        </div>
+        <SearchBar
+          label="Search products"
+          placeholder="atta, gehun ka aata, toor dal, milk…"
+          value={q}
+          onValueChange={setQ}
+          busy={search.isPending}
+          onSubmit={() => q.trim() && search.mutate(q.trim())}
+          trailing={
+            search.isPending ? (
+              <span className="flex h-12 w-12 items-center justify-center text-primary"><CircularProgress size={24} label="Searching" /></span>
+            ) : (
+              <IconButton icon="arrow_forward" label="Search" variant="filled" type="submit" disabled={!q.trim()} size={48} />
+            )
+          }
+        />
+        {search.error && <InlineMessage tone="error">{errorMessage(search.error)}</InlineMessage>}
+        {add.error && <InlineMessage tone="error">{errorMessage(add.error)}</InlineMessage>}
+
         {results && (
-          <div className="mt-3 space-y-3">
+          <div className="space-y-4">
             {results.looseDeclined.map((l) => (
-              <div key={l.query} className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-                <b>{l.query}</b>: {l.reason}
-                {l.alternative && (
-                  <>
-                    {" "}Packaged option: <b>{l.alternative.name}</b>.
-                    {l.alternative.listingId && (
-                      <Button tone="secondary" className="ml-2 !py-1" disabled={add.isPending} onClick={() => add.mutate(l.alternative!.listingId!)}>
-                        Add
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
+              <InlineMessage
+                key={l.query}
+                tone="warning"
+                icon="scale"
+                title={`“${l.query}” is not sold loose`}
+                action={
+                  l.alternative?.listingId ? (
+                    <Button variant="tonal" icon="add" size="sm" loading={add.isPending && add.variables?.listingId === l.alternative.listingId} onClick={() => add.mutate({ listingId: l.alternative!.listingId!, label: l.alternative!.name })}>
+                      Add packaged
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {l.reason}
+                {l.alternative && <> Packaged option: <b>{l.alternative.name}</b>.</>}
+              </InlineMessage>
             ))}
-            {results.groups.length === 0 && results.looseDeclined.length === 0 && <p className="text-sm text-stone-500">No stores near you have “{results.query}”.</p>}
+            {results.groups.length === 0 && results.looseDeclined.length === 0 && (
+              <EmptyState icon="search_off" title={`No nearby store has “${results.query}”`}>Try another name, like “aata” or “dal”, or a brand.</EmptyState>
+            )}
             {results.groups.map((g) => (
-              <div key={g.canonicalProductId} className="rounded-lg border border-stone-200">
-                <div className="border-b border-stone-200 bg-stone-50 px-3 py-2 text-sm font-medium">
-                  {g.name} <span className="font-normal text-stone-500">· {g.packLabel}</span>
-                </div>
-                <ul className="divide-y divide-stone-100">
-                  {g.offers.map((o) => (
-                    <li key={o.listingId} className="flex items-center gap-3 px-3 py-2 text-sm">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate">{o.storeName}</div>
-                        <div className="text-xs text-stone-500">
-                          {(o.distanceM / 1000).toFixed(1)} km · delivery {o.deliveryChargePaise === null ? "?" : o.deliveryChargePaise ? formatINR(o.deliveryChargePaise) : "free"}
+              <Card key={g.canonicalProductId} variant="outlined" className="overflow-hidden">
+                <header className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+                  <h3 className="min-w-0 type-title-small text-on-surface">
+                    {g.name} <span className="font-normal text-on-surface-variant">· {g.packLabel}</span>
+                  </h3>
+                  <span className="shrink-0 type-body-small text-on-surface-variant">{g.offers.length} store{g.offers.length === 1 ? "" : "s"}</span>
+                </header>
+                <ul>
+                  {g.offers.map((o, i) => {
+                    const inBasket = basketItemIds.has(o.listingId);
+                    return (
+                      <li key={o.listingId} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+                        <Icon name="storefront" className="text-on-surface-variant" />
+                        <div className="min-w-0 flex-1 basis-36">
+                          <p className="truncate type-body-large text-on-surface">{o.storeName}</p>
+                          <p className="type-body-small text-on-surface-variant">
+                            {km(o.distanceM)} · {o.deliveryChargePaise === null ? "delivery at quote" : o.deliveryChargePaise ? `${formatINR(o.deliveryChargePaise)} delivery` : "free delivery"}
+                          </p>
+                          {i === 0 && g.offers.length > 1 && <StatusLabel tone="success" icon="savings" className="mt-1 h-6">Cheapest</StatusLabel>}
                         </div>
-                      </div>
-                      <Badge>{o.badge}</Badge>
-                      <span className="w-16 text-right tabular-nums">{formatINR(o.pricePaise)}</span>
-                      <Button tone="secondary" className="!py-1" disabled={add.isPending} onClick={() => add.mutate(o.listingId)}>
-                        {basketItemIds.has(o.listingId) ? "Add 1 more" : "Add"}
-                      </Button>
-                    </li>
-                  ))}
+                        <span className="text-right">
+                          <span className="block type-title-medium tabular-nums text-on-surface">{formatINR(o.pricePaise)}</span>
+                          {o.mrpPaise > o.pricePaise && <span className="block type-body-small text-on-surface-variant line-through">{formatINR(o.mrpPaise)}</span>}
+                        </span>
+                        <Button
+                          variant={inBasket ? "outlined" : "tonal"}
+                          size="sm"
+                          icon="add"
+                          loading={add.isPending && add.variables?.listingId === o.listingId}
+                          disabled={add.isPending}
+                          onClick={() => add.mutate({ listingId: o.listingId, label: `${o.name} from ${o.storeName}` })}
+                          aria-label={`${inBasket ? "Add one more" : "Add"} ${o.name} from ${o.storeName}`}
+                        >
+                          {inBasket ? "1 more" : "Add"}
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
-              </div>
+              </Card>
             ))}
+            {results.groups.length > 0 && <p className="type-body-small text-on-surface-variant">Catalogue prices. Each store confirms price and stock when you get a quote.</p>}
           </div>
         )}
-        {add.error && <p role="alert" className="mt-2 text-sm text-rose-700">{errorMessage(add.error)}</p>}
-      </Card>
+      </section>
 
-      <Card title="Optimise across stores">
-        <p className="mb-2 text-sm text-stone-600">
-          Build a shopping list (uses the search box text and quantity), then let the optimiser pick stores and weigh delivery charges.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm">
-            Qty{" "}
-            <input type="number" min={1} step={1} className="w-16 rounded border border-stone-300 px-2 py-1" value={needQty} onChange={(e) => setNeedQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))} />
-          </label>
-          <Button tone="secondary" disabled={!q.trim()} onClick={addNeed}>Add “{q.trim() || "…"}” to list</Button>
+      {/* ---- Plan a list (optimiser) ---- */}
+      <Card variant="filled" className="space-y-4 p-4 sm:p-6" aria-labelledby="plan-title">
+        <div className="flex items-start gap-3">
+          <Icon name="route" className="mt-0.5 text-primary" />
+          <div>
+            <h2 id="plan-title" className="type-title-medium text-on-surface">Plan a whole list</h2>
+            <p className="type-body-medium text-on-surface-variant">Add items, then let the optimiser pick stores and weigh delivery charges. It replaces your basket.</p>
+          </div>
         </div>
-        {needs.length > 0 && (
-          <ul className="mt-2 space-y-1 text-sm">
+
+        <form
+          className="flex flex-wrap items-start gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            addNeed();
+          }}
+        >
+          <TextField className="min-w-48 flex-1" label="Item" value={needText} onValueChange={setNeedText} supportingText="e.g. toor dal 1 kg" />
+          <div className="flex h-14 items-center gap-3">
+            <QtyStepper label="Packs" value={needQty} onChange={setNeedQty} />
+            <Button type="submit" variant="tonal" icon="playlist_add" disabled={!needText.trim()}>Add</Button>
+          </div>
+        </form>
+
+        {needs.length > 0 ? (
+          <ul className="flex flex-wrap gap-2" aria-label="Shopping list">
             {needs.map((n, i) => (
-              <li key={i} className="flex items-center justify-between rounded bg-stone-50 px-2 py-1">
-                <span>{n.qty} × {n.query}</span>
-                <button className="text-stone-400 hover:text-rose-600" onClick={() => setNeeds((x) => x.filter((_, j) => j !== i))} aria-label={`Remove ${n.query}`}>✕</button>
+              <li key={`${n.query}-${i}`}>
+                <InputChip removeLabel={`Remove ${n.query}`} onRemove={() => setNeeds((x) => x.filter((_, j) => j !== i))}>
+                  {n.qty} × {n.query}
+                </InputChip>
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="type-body-medium text-on-surface-variant">Your list is empty.</p>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="text-sm">
-            Budget ₹{" "}
-            <input type="number" min={0} className="w-24 rounded border border-stone-300 px-2 py-1" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="optional" />
-          </label>
-          <Button disabled={!needs.length || optimise.isPending} onClick={() => optimise.mutate()}>
-            {optimise.isPending ? "Optimising…" : "Optimise"}
+
+        <div className="flex flex-wrap items-start gap-3">
+          <TextField
+            className="w-48"
+            label="Budget (optional)"
+            prefix="₹"
+            inputMode="decimal"
+            value={budget}
+            onValueChange={setBudget}
+            error={budgetInvalid ? "Enter an amount like 1500" : null}
+          />
+          <Button className="mt-2" icon="auto_fix_high" loading={optimise.isPending} disabled={!needs.length || budgetInvalid} onClick={() => optimise.mutate()}>
+            Optimise basket
           </Button>
         </div>
-        {optimise.error && <p role="alert" className="mt-2 text-sm text-rose-700">{errorMessage(optimise.error)}</p>}
+        {optimise.error && <InlineMessage tone="error">{errorMessage(optimise.error)}</InlineMessage>}
+
         {plan && (
-          <div className="mt-3 space-y-1 text-sm">
-            <p className="font-medium">Basket updated · estimate {formatINR(plan.estimatedTotalPaise)} (get a quote for the exact total)</p>
-            {plan.withinBudget === false && <p className="text-amber-800">Over your budget.</p>}
-            <ul className="list-disc space-y-0.5 pl-5 text-stone-700">
-              {plan.choices.map((c) => <li key={`${c.query}-${c.offer.listingId}`}>{c.qty} × {c.offer.name} at {c.offer.storeName}: {c.reason}</li>)}
-              {plan.reasons.map((r) => <li key={r}>{r}</li>)}
-              {plan.unmatched.map((u) => <li key={u.query} className="text-rose-700">{u.query}: {u.reason}</li>)}
+          <div className="space-y-3 rounded-md bg-surface p-4">
+            <p className="flex flex-wrap items-center gap-2 type-title-small text-on-surface">
+              <Icon name="check_circle" className="text-primary" />
+              Basket updated · estimate {formatINR(plan.estimatedTotalPaise)}
+              {plan.withinBudget === false && <StatusLabel tone="warning" icon="warning">Over budget</StatusLabel>}
+              {plan.withinBudget === true && <StatusLabel tone="success" icon="savings">Within budget</StatusLabel>}
+            </p>
+            <ul className="space-y-2 type-body-medium">
+              {plan.choices.map((c) => (
+                <li key={`${c.query}-${c.offer.listingId}`} className="flex gap-2">
+                  <Icon name="check" size={20} className="text-primary" />
+                  <span>
+                    <span className="text-on-surface">{c.qty} × {c.offer.name}</span> <span className="text-on-surface-variant">at {c.offer.storeName} — {c.reason}</span>
+                  </span>
+                </li>
+              ))}
+              {plan.reasons.map((r) => (
+                <li key={r} className="flex gap-2 text-on-surface-variant">
+                  <Icon name="lightbulb" size={20} className="text-tertiary" />
+                  {r}
+                </li>
+              ))}
+              {plan.unmatched.map((u) => (
+                <li key={u.query} className="flex gap-2 text-error">
+                  <Icon name="error" size={20} />
+                  {u.query}: {u.reason}
+                </li>
+              ))}
             </ul>
+            <p className="type-body-small text-on-surface-variant">Get a verified quote from your basket for the exact total.</p>
           </div>
         )}
       </Card>

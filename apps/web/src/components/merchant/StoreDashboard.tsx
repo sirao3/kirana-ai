@@ -1,139 +1,128 @@
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "../../lib/api";
-import { useLive } from "../../lib/live";
-import { Badge } from "../kit";
-import { setPendingOffers, unlockAudio } from "./alert";
-import { Catalogue } from "./Catalogue";
+import { Button, CircularProgress, cx, Icon, InlineMessage, StatusLabel, Switch } from "../m3";
 import { OfferCard } from "./OfferCard";
 import { OrderCard } from "./OrderCard";
-import type { Dashboard } from "./types";
+import { useStore, type StoreState } from "./useStore";
 
-/**
- * One store's live dashboard (polls every second): Online toggle, offer cards, orders column and
- * (full size only) the catalogue tab. `compact` is the wall tile.
- */
-export function StoreDashboard({ storeId, token, compact = false }: { storeId: string; token: string; compact?: boolean }) {
-  const qc = useQueryClient();
-  const key = ["merchant", storeId];
-  const q = useLive<Dashboard>(key, () => api(`/bpp/merchant/${storeId}/dashboard`, { token }));
-  const [tab, setTab] = useState<"orders" | "catalogue">("orders");
-  const [tooLate, setTooLate] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const d = q.data;
-  const pendingCount = d?.offers.length ?? 0;
-  useEffect(() => {
-    setPendingOffers(`${storeId}`, pendingCount > 0 && !d?.store.faults.neverAnswer);
-    return () => setPendingOffers(`${storeId}`, false);
-  }, [storeId, pendingCount, d?.store.faults.neverAnswer]);
-
-  const refresh = () => qc.invalidateQueries({ queryKey: key });
-  async function run(id: string, fn: () => Promise<unknown>, onConflict?: () => void) {
-    setBusy(id);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && onConflict) onConflict();
-      else setError(e instanceof ApiError ? `${e.code}${e.message !== e.code ? `: ${e.message}` : ""}` : "Request failed");
-    } finally {
-      setBusy(null);
-      void refresh();
-    }
-  }
-  const markTooLate = (id: string) => () => setTooLate((s) => new Set(s).add(id));
-  const post = (path: string, json?: unknown) => api(`/bpp/merchant/${storeId}${path}`, { method: "POST", token, json: json ?? {} });
-
-  async function toggleOnline() {
-    void unlockAudio(); // the click is the user gesture that unlocks audio
-    await run("online", () => api(`/bpp/merchant/${storeId}/store`, { method: "PATCH", token, json: { isOnline: !d?.store.isOnline } }));
-  }
-
-  if (q.isError && !d) {
-    return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">Could not load this store ({(q.error as Error).message}).</div>;
-  }
-  if (!d) return <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-500">Loading store…</div>;
-
-  const online = d.store.isOnline;
-  const activeOrders = d.orders.filter((o) => o.fulfilmentStatus !== "DELIVERED");
-  const doneOrders = d.orders.filter((o) => o.fulfilmentStatus === "DELIVERED");
-
+/** Fault-injection labels shown next to a store name. */
+export function FaultLabels({ faults }: { faults: { autoReject: boolean; neverAnswer: boolean } }) {
+  if (!faults.autoReject && !faults.neverAnswer) return null;
   return (
-    <section className={`rounded-xl border border-stone-200 bg-stone-50 ${compact ? "p-2" : "p-4"}`} data-testid={`dashboard-${storeId}`}>
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className={`truncate font-semibold ${compact ? "text-sm" : "text-lg"}`}>{d.store.name}</h2>
-          <div className="flex flex-wrap gap-1">
-            {d.store.faults.autoReject && <Badge tone="warn">auto-reject</Badge>}
-            {d.store.faults.neverAnswer && <Badge tone="warn">never answers</Badge>}
-          </div>
-        </div>
-        <button
-          role="switch"
-          aria-checked={online}
-          onClick={toggleOnline}
-          disabled={busy === "online"}
-          className={`flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium ${online ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-stone-300 bg-white text-stone-600"}`}
-        >
-          <span className={`h-2.5 w-2.5 rounded-full ${online ? "bg-emerald-500" : "bg-stone-400"}`} />
-          {online ? "Online" : "Offline"}
-        </button>
-      </header>
+    <span className="flex flex-wrap gap-1">
+      {faults.autoReject && <StatusLabel tone="warning" icon="block">Auto-reject</StatusLabel>}
+      {faults.neverAnswer && <StatusLabel tone="warning" icon="phone_disabled">Never answers</StatusLabel>}
+    </span>
+  );
+}
 
-      {error && <p className="mb-2 rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-700">{error}</p>}
+export function OnlineSwitch({ s, compact }: { s: StoreState; compact?: boolean }) {
+  const online = !!s.d?.store.isOnline;
+  return (
+    <Switch
+      checked={online}
+      busy={s.busy === "online"}
+      onChange={() => void s.toggleOnline()}
+      label={online ? "Online" : "Offline"}
+      hideLabel={compact}
+      className={compact ? undefined : "pr-1"}
+      labelClassName="max-sm:sr-only"
+    />
+  );
+}
 
-      {!compact && (
-        <div className="mb-3 flex gap-1 border-b border-stone-200" role="tablist">
-          {(["orders", "catalogue"] as const).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium capitalize ${tab === t ? "border-emerald-600 text-emerald-700" : "border-transparent text-stone-500 hover:text-stone-800"}`}
-            >
-              {t === "orders" ? "Offers & orders" : "Catalogue"}
-            </button>
+function ColumnHeading({ title, count, icon }: { title: string; count: number; icon: string }) {
+  return (
+    <h3 className="mb-2 flex items-center gap-2 type-title-small text-on-surface-variant">
+      <Icon name={icon} size={20} />
+      {title}
+      {count > 0 && <span className="rounded-full bg-secondary-container px-2 type-label-medium text-on-secondary-container">{count}</span>}
+    </h3>
+  );
+}
+
+/** Offers (most urgent) and in-progress orders. Two columns on wide windows; one stack on the wall tiles. */
+export function LiveBoard({ s, compact = false }: { s: StoreState; compact?: boolean }) {
+  const d = s.d!;
+  const online = d.store.isOnline;
+  const active = d.orders.filter((o) => o.fulfilmentStatus !== "DELIVERED");
+  return (
+    <div className={compact ? "space-y-4" : "grid items-start gap-6 md:grid-cols-2"}>
+      <section aria-label="New offers">
+        <ColumnHeading title="New offers" count={d.offers.length} icon="notifications_active" />
+        <div className="space-y-3">
+          {d.offers.length === 0 && (
+            <p className={cx("flex items-center justify-center gap-2 rounded-md border border-dashed border-outline-variant text-center type-body-medium text-on-surface-variant", compact ? "p-3" : "p-6")}>
+              <Icon name={online ? "hourglass_empty" : "cloud_off"} size={20} />
+              {online ? "Waiting for orders…" : "Go online to receive orders"}
+            </p>
+          )}
+          {d.offers.map((o) => (
+            <OfferCard
+              key={o.id}
+              offer={o}
+              compact={compact}
+              hideActions={d.store.faults.neverAnswer}
+              tooLate={s.tooLate.has(o.id)}
+              busy={s.busy === o.id}
+              onAccept={() => void s.accept(o.id)}
+              onReject={(reason) => void s.reject(o.id, reason)}
+            />
           ))}
         </div>
-      )}
-
-      {tab === "catalogue" && !compact ? (
-        <Catalogue storeId={storeId} token={token} />
-      ) : (
-        <div className={compact ? "space-y-3" : "grid gap-4 md:grid-cols-2"}>
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-              New offers {pendingCount > 0 && <Badge tone="warn">{pendingCount}</Badge>}
-            </h3>
-            <div className="space-y-2">
-              {d.offers.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-3 text-center text-xs text-stone-500">{online ? "Waiting for orders…" : "Go online to receive orders"}</p>}
-              {d.offers.map((o) => (
-                <OfferCard
-                  key={o.id}
-                  offer={o}
-                  compact={compact}
-                  hideActions={d.store.faults.neverAnswer}
-                  tooLate={tooLate.has(o.id)}
-                  busy={busy === o.id}
-                  onAccept={() => run(o.id, () => post(`/offers/${o.id}/accept`), markTooLate(o.id))}
-                  onReject={(reason) => run(o.id, () => post(`/offers/${o.id}/reject`, { reason }), markTooLate(o.id))}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Orders</h3>
-            <div className="space-y-2">
-              {activeOrders.length === 0 && doneOrders.length === 0 && <p className="rounded-lg border border-dashed border-stone-300 p-3 text-center text-xs text-stone-500">No orders yet</p>}
-              {[...activeOrders, ...doneOrders].map((o) => (
-                <OrderCard key={o.id} order={o} busy={busy === o.id} onAdvance={() => run(o.id, () => post(`/orders/${o.id}/advance`))} />
-              ))}
-            </div>
-          </div>
+      </section>
+      <section aria-label="In progress">
+        <ColumnHeading title="In progress" count={active.length} icon="local_shipping" />
+        <div className="space-y-3">
+          {active.length === 0 && (
+            <p className={cx("rounded-md border border-dashed border-outline-variant text-center type-body-medium text-on-surface-variant", compact ? "p-3" : "p-6")}>No orders in progress</p>
+          )}
+          {active.map((o) => (
+            <OrderCard key={o.id} order={o} compact={compact} busy={s.busy === o.id} onAdvance={() => void s.advance(o.id)} />
+          ))}
         </div>
+      </section>
+    </div>
+  );
+}
+
+export function StoreError({ s }: { s: StoreState }) {
+  if (!s.error) return null;
+  return (
+    <InlineMessage tone="error" className="mb-3" action={<Button variant="text" size="sm" onClick={s.clearError}>Dismiss</Button>}>
+      {s.error}
+    </InlineMessage>
+  );
+}
+
+/** Wall tile: one store, compact. Tiles with a pending offer get a primary outline so they stand out across the room. */
+export function StoreTile({ storeId, token }: { storeId: string; token: string }) {
+  const s = useStore(storeId, token);
+  const d = s.d;
+  const hot = (d?.offers.length ?? 0) > 0;
+  return (
+    <section
+      aria-label={d?.store.name ?? "Store"}
+      data-testid={`dashboard-${storeId}`}
+      className={cx("rounded-xl bg-surface-container-low p-4 transition-shadow duration-300", hot && "ring-2 ring-primary")}
+    >
+      {!d ? (
+        s.q.isError ? (
+          <InlineMessage tone="error">Could not load this store ({(s.q.error as Error).message}).</InlineMessage>
+        ) : (
+          <div className="flex items-center gap-3 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading store…</div>
+        )
+      ) : (
+        <>
+          <header className="mb-3 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="truncate type-title-medium text-on-surface">{d.store.name}</h2>
+              <p className={cx("type-body-small", d.store.isOnline ? "text-primary" : "text-on-surface-variant")}>{d.store.isOnline ? "Online" : "Offline"}</p>
+              <div className="mt-1"><FaultLabels faults={d.store.faults} /></div>
+            </div>
+            <OnlineSwitch s={s} compact />
+          </header>
+          <StoreError s={s} />
+          <LiveBoard s={s} compact />
+        </>
       )}
     </section>
   );

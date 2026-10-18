@@ -1,41 +1,50 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AgentEvent, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../lib/format";
 import { useLive } from "../lib/live";
-import { setSession } from "../lib/session";
 import { useRequireSession } from "../lib/useSession";
-import { Badge, Button, Card } from "../components/kit";
+import { Badge, BottomSheet, Button, CircularProgress, Fab, IconButton, InlineMessage, TabPanel, Tabs } from "../components/m3";
+import { EXPANDED, useMedia } from "../lib/useMedia";
 import { bap } from "../components/shop/bap";
-import { ApprovalCard } from "../components/shop/ApprovalCard";
+import { ApprovalDialog } from "../components/shop/ApprovalCard";
 import { BasketPanel, quoteIsLive } from "../components/shop/BasketPanel";
 import { ChatPanel } from "../components/shop/ChatPanel";
+import { CustomerShell } from "../components/shop/CustomerShell";
 import { errorMessage } from "../components/shop/errors";
 import { ManualPanel } from "../components/shop/ManualPanel";
-import { QuotePanel } from "../components/shop/QuotePanel";
 
-type Tab = "assistant" | "manual";
+type Tab = "assistant" | "search";
 
-/** Customer shopping: chat + manual mode on the left; basket, quote and approval on the right. */
+/**
+ * Customer shopping. Primary pane: Assistant / Search tabs. Supporting pane (≥840 px): the basket.
+ * Below 840 px the basket lives in a bottom sheet opened from an extended FAB. Approve & pay is a dialog.
+ */
 export function Shop() {
   const session = useRequireSession("customer");
   const nav = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("assistant");
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [quoteErrors, setQuoteErrors] = useState<StoreQuoteError[]>([]);
   const [agentDown, setAgentDown] = useState<"unavailable" | "rate_limited" | null>(null);
 
   const basketQ = useLive(["basket"], bap.basket, { enabled: !!session });
-  const orders = useQuery({ queryKey: ["orders"], queryFn: bap.orders, enabled: !!session, refetchInterval: 5000 });
+  const wide = useMedia(EXPANDED);
 
   const quote = useMutation({
     mutationFn: bap.quote,
     onSuccess: (r) => {
       qc.setQueryData(["basket"], r.basket);
       setQuoteErrors(r.errors);
-      if (r.quote) setApprovalOpen(true);
+      if (r.quote) {
+        setSheetOpen(false); // never stack the dialog on the sheet
+        setApprovalOpen(true);
+      } else {
+        setSheetOpen(!window.matchMedia(EXPANDED).matches);
+      }
     },
   });
 
@@ -48,105 +57,114 @@ export function Shop() {
     if (events.some((e) => e.type === "approval_requested")) setApprovalOpen(true);
   }
 
-  function checkout() {
+  function review() {
+    setSheetOpen(false);
     if (basket && quoteIsLive(basket)) setApprovalOpen(true);
     else quote.mutate();
   }
 
-  const showApproval = approvalOpen && !!basket && quoteIsLive(basket);
+  const basketView = basketQ.isError && !basket ? (
+    <InlineMessage tone="error" action={<Button variant="text" onClick={() => void basketQ.refetch()}>Retry</Button>}>
+      Could not load your basket: {errorMessage(basketQ.error)}
+    </InlineMessage>
+  ) : basket ? (
+    <BasketPanel basket={basket} onCheckout={review} checkingOut={quote.isPending} error={quote.error ? errorMessage(quote.error) : null} quoteErrors={quoteErrors} />
+  ) : (
+    <div className="flex items-center gap-3 py-6 type-body-medium text-on-surface-variant">
+      <CircularProgress size={20} className="text-primary" /> Loading basket…
+    </div>
+  );
+
+  const openBasket = () => {
+    if (wide) document.getElementById("basket-title")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    else setSheetOpen(true);
+  };
+  const live = basket ? quoteIsLive(basket) : false;
+  const fabTotal = basket ? (live && basket.quote ? basket.quote.grandTotalPaise : basket.stores.reduce((s, g) => s + g.itemsTotalPaise, 0)) : 0;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold">KiranaAI</h1>
-          <p className="text-sm text-stone-600">Shopping as {session.name}</p>
-        </div>
-        <Button
-          tone="ghost"
-          onClick={() => {
-            setSession(null);
-            nav("/");
-          }}
-        >
-          Switch persona
-        </Button>
-      </header>
-
-      {agentDown && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <span>
-            {agentDown === "rate_limited"
-              ? "The assistant is busy (too many requests). Please wait a bit, or shop manually."
-              : "The assistant is unavailable right now. You can still search and build your basket manually."}
+    <CustomerShell
+      session={session}
+      active="shop"
+      title="Shop"
+      subtitle={`Shopping as ${session.name}`}
+      actions={
+        !wide && (
+          <span className="relative inline-flex">
+            <IconButton icon="shopping_basket" label={`Basket, ${basket?.itemCount ?? 0} items`} onClick={() => setSheetOpen(true)} />
+            <Badge count={basket?.itemCount ?? 0} />
           </span>
-          <Button tone="secondary" onClick={() => setTab("manual")}>Use manual mode</Button>
+        )
+      }
+    >
+      <div className="mx-auto flex w-full max-w-[1400px] flex-1 gap-6 px-4 sm:px-6">
+        {/* Primary pane */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {agentDown && (
+            <InlineMessage
+              tone="warning"
+              className="mb-2"
+              title={agentDown === "rate_limited" ? "The assistant is busy" : "The assistant is unavailable"}
+              action={<Button variant="tonal" size="sm" icon="search" onClick={() => setTab("search")}>Search instead</Button>}
+            >
+              {agentDown === "rate_limited" ? "Too many requests right now. Wait a moment, or search and build your basket yourself." : "You can still search and build your basket yourself."}
+            </InlineMessage>
+          )}
+          <Tabs
+            label="How to shop"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: "assistant", label: "Assistant", icon: "auto_awesome" },
+              { value: "search", label: "Search & plan", icon: "manage_search" },
+            ]}
+          />
+          <TabPanel value="assistant" active={tab} className="mx-auto h-[calc(100dvh-64px-48px-80px)] min-h-[420px] w-full max-w-3xl sm:h-[calc(100dvh-64px-48px)]">
+            <ChatPanel onEvents={onEvents} onAgentDown={setAgentDown} onUseManual={() => setTab("search")} onOpenBasket={openBasket} onReview={review} />
+          </TabPanel>
+          <TabPanel value="search" active={tab} className="mx-auto w-full max-w-3xl pb-28 md:pb-8">
+            <ManualPanel basketItemIds={new Set(basket?.stores.flatMap((s) => s.items.map((i) => i.listingId)) ?? [])} onOpenBasket={openBasket} />
+          </TabPanel>
         </div>
+
+        {/* Supporting pane: the basket, always visible from 840 px */}
+        {wide && (
+          <aside aria-label="Basket" className="sticky top-16 max-h-[calc(100dvh-80px)] w-[380px] shrink-0 self-start overflow-y-auto rounded-xl bg-surface-container-low p-4 lg:w-[420px]">
+            {basketView}
+          </aside>
+        )}
+      </div>
+
+      {/* Below 840 px: basket in a bottom sheet, opened from the app bar or (on Search) an extended FAB */}
+      {!wide && tab === "search" && basket && basket.itemCount > 0 && !sheetOpen && (
+        <Fab
+          icon="shopping_basket"
+          label="Open basket"
+          className="fixed bottom-24 right-4 z-20 sm:bottom-6 sm:right-6"
+          onClick={() => setSheetOpen(true)}
+          extended={
+            <span>
+              Basket · {basket.itemCount} · {formatINR(fabTotal)}
+            </span>
+          }
+        />
+      )}
+      {!wide && (
+        <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Basket">
+          {basketView}
+        </BottomSheet>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-3">
-          <div role="tablist" className="flex gap-1 rounded-lg bg-stone-200 p-1 text-sm">
-            {(["assistant", "manual"] as const).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={tab === t}
-                className={`flex-1 rounded-md px-3 py-1.5 font-medium ${tab === t ? "bg-white shadow-sm" : "text-stone-600"}`}
-                onClick={() => setTab(t)}
-              >
-                {t === "assistant" ? "Assistant" : "Manual"}
-              </button>
-            ))}
-          </div>
-          <div className={tab === "assistant" ? "" : "hidden"}>
-            <ChatPanel onEvents={onEvents} onAgentDown={setAgentDown} onUseManual={() => setTab("manual")} />
-          </div>
-          <div className={tab === "manual" ? "" : "hidden"}>
-            <ManualPanel basketItemIds={new Set(basket?.stores.flatMap((s) => s.items.map((i) => i.listingId)) ?? [])} />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {showApproval && basket && (
-            <ApprovalCard
-              basket={basket}
-              onClose={() => setApprovalOpen(false)}
-              onPaid={(id) => nav(`/shop/orders/${id}`)}
-              onRequote={() => quote.mutate()}
-            />
-          )}
-          {basketQ.isError && !basket ? (
-            <Card><p className="text-sm text-rose-700">Could not load your basket: {errorMessage(basketQ.error)}</p></Card>
-          ) : basket ? (
-            <>
-              <BasketPanel
-                basket={basket}
-                onCheckout={checkout}
-                checkingOut={quote.isPending}
-                error={quote.error ? errorMessage(quote.error) : null}
-              />
-              <QuotePanel basket={basket} errors={quoteErrors} />
-            </>
-          ) : (
-            <Card><p className="text-sm text-stone-500">Loading basket…</p></Card>
-          )}
-          {orders.data && orders.data.length > 0 && (
-            <Card title="Your orders">
-              <ul className="divide-y divide-stone-100 text-sm">
-                {orders.data.slice(0, 5).map((o) => (
-                  <li key={o.basketId} className="flex items-center justify-between gap-2 py-2">
-                    <Link className="text-emerald-700 underline" to={`/shop/orders/${o.basketId}`}>
-                      {formatINR(o.grandTotalPaise)} · {o.subOrders.length} store{o.subOrders.length === 1 ? "" : "s"}
-                    </Link>
-                    <Badge tone={o.settled ? "good" : o.paymentStatus === "PAID" ? "info" : "neutral"}>{o.settled ? "settled" : o.paymentStatus.toLowerCase()}</Badge>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-      </div>
-    </main>
+      {basket && basket.quote && (
+        <ApprovalDialog
+          open={approvalOpen}
+          basket={basket}
+          onClose={() => setApprovalOpen(false)}
+          onPaid={(id) => nav(`/shop/orders/${id}`)}
+          onRequote={() => quote.mutate()}
+          requoting={quote.isPending}
+        />
+      )}
+    </CustomerShell>
   );
 }

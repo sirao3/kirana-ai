@@ -2,10 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="KiranaAI: agentic commerce for kirana stores on Beckn/ONDC." />
+    <meta name="theme-color" content="#f8fbf0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#11140f" media="(prefers-color-scheme: dark)" />
     <title>KiranaAI</title>
+    <script>
+      // Apply the saved/system theme before first paint (no light flash in dark mode).
+      (function () {
+        var m = null;
+        try { m = localStorage.getItem("kiranaai.theme"); } catch (e) {}
+        var dark = m === "dark" || (m !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,100..151,300..800&family=Roboto+Mono:wght@400;500&display=swap" />
+    <!-- Material Symbols subset: keep icon_names sorted and in sync with the icons used in src/. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&icon_names=account_balance,account_balance_wallet,add,admin_panel_settings,arrow_back,arrow_drop_down,arrow_forward,attach_file,auto_awesome,auto_fix_high,block,bolt,brightness_auto,build,cancel,chat,check,check_circle,chevron_right,close,cloud_done,cloud_off,currency_exchange,dark_mode,delete,delete_forever,description,done_all,download,edit_square,error,expand_more,fact_check,filter_list,grid_view,hourglass_empty,hourglass_top,hub,info,inventory_2,light_mode,lightbulb,local_shipping,location_on,lock,login,logout,manage_search,monitoring,near_me,north_east,notifications_active,payments,percent,person,phone_disabled,play_arrow,playlist_add,receipt_long,refresh,remove,restart_alt,route,save,savings,scale,schedule,search,search_off,sell,send,shopping_bag,shopping_basket,south_west,storefront,swap_horiz,switch_account,sync,sync_alt,tag,task_alt,thumb_up,timer,timer_off,touch_app,travel_explore,trending_flat,tune,two_wheeler,upload_file,verified,visibility,visibility_off,volunteer_activism,warning&display=block" />
   </head>
-  <body class="bg-stone-50 text-stone-900">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
