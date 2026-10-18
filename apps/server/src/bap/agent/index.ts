@@ -178,7 +178,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     if (agentTestHooks.live) return agentTestHooks.live;
     if (config.AGENT_FAKE === "1") return (live ??= createLiveFromLlm(createFakeLlm(), FAKE_VOICE_TRANSCRIPT));
     if (!config.GEMINI_API_KEY) return null;
-    live ??= createGeminiLive({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_LIVE_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, debug: process.env.LIVE_DEBUG === "1" });
+    live ??= createGeminiLive({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_LIVE_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: config.GEMINI_TRANSCRIBE_MODEL || undefined, debug: process.env.LIVE_DEBUG === "1" });
     return live;
   };
 

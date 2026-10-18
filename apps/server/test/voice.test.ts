@@ -156,7 +156,7 @@ describe.skipIf(!key)("live Gemini Live smoke (voice)", () => {
 
   it("transcribes 'Where is my order?' and answers through the tools", async () => {
     const model = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
-    agentTestHooks.live = createGeminiLive({ apiKey: key!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
+    agentTestHooks.live = createGeminiLive({ apiKey: key!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-3.5-transcribe-live" });
     const pcm = readFileSync(new URL("./fixtures/voice-where-is-my-order.pcm", import.meta.url));
     const started = Date.now();
     const res = await h.call<AgentReply>("POST", "/bap/agent/chat", { audio: audio(pcm.toString("base64")) });

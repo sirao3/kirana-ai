@@ -59,6 +59,11 @@ export function createGeminiLive(opts: {
   systemInstruction: string;
   declarations: FunctionDeclaration[];
   stallMs?: number;
+  /**
+   * Speech-to-text model run in parallel for the transcript we show and judge quantities against. The agent model's own
+   * input transcription stops once it starts answering, which on Cloud Run is mid-sentence (measured 18 Oct).
+   */
+  transcribeModel?: string;
   /** LIVE_DEBUG=1: log the server message sequence to stderr. */
   debug?: boolean;
 }): LiveAgent {
@@ -75,7 +80,6 @@ export function createGeminiLive(opts: {
     let toolsRan = false;
     let toolsRunning = 0;
     let lastActivity = Date.now();
-    let lastInput = 0;
     let session: Session | undefined;
     let settle!: { ok: () => void; fail: (e: Error) => void };
     const finished = new Promise<void>((ok, fail) => (settle = { ok, fail }));
@@ -101,7 +105,6 @@ export function createGeminiLive(opts: {
       if (m.setupComplete) ready();
       if (sc?.inputTranscription?.text) {
         transcript += sc.inputTranscription.text;
-        lastInput = Date.now();
         onTranscript?.(transcript.trim());
       }
       if (sc?.outputTranscription?.text) said[said.length - 1] += sc.outputTranscription.text;
@@ -120,12 +123,7 @@ export function createGeminiLive(opts: {
       }
       // The reply text is complete at generationComplete; turnComplete only follows once the spoken audio has streamed
       // (~10 s for a 3-sentence reply, measured 18 Oct). We drop the audio, so finish early (grace for late transcript pieces).
-      if (sc?.generationComplete && !toolThisTurn && !m.toolCall) {
-        // The input transcript can still be trickling in (seen on Cloud Run): wait until it has been quiet for 1.2 s, at most 3 s.
-        const replyAt = Date.now();
-        const check = () => (Date.now() - lastInput >= 1200 || Date.now() - replyAt >= 3000 ? end() : setTimeout(check, 100));
-        setTimeout(check, 300);
-      }
+      if (sc?.generationComplete && !toolThisTurn && !m.toolCall) setTimeout(() => end(), 300);
       if (sc?.turnComplete) {
         said.push("");
         // A turn that ended in a tool call continues once the tool response is sent.
@@ -186,16 +184,67 @@ export function createGeminiLive(opts: {
     }
   }
 
+  /** Transcript of the recording from the speech-to-text Live model ("" on any failure; never throws). */
+  async function transcribe(model: string, audio: VoiceAudio, signal: AbortSignal): Promise<string> {
+    let text = "";
+    let session: Session | undefined;
+    let done!: () => void;
+    const finished = new Promise<void>((r) => (done = r));
+    const timer = setTimeout(done, 12_000);
+    signal.addEventListener("abort", done, { once: true });
+    try {
+      session = await ai.live.connect({
+        model,
+        config: { responseModalities: [Modality.TEXT], inputAudioTranscription: {}, realtimeInputConfig: { automaticActivityDetection: { disabled: true } } },
+        callbacks: {
+          onmessage: (m) => {
+            if (m.serverContent?.inputTranscription?.text) text += m.serverContent.inputTranscription.text;
+            if (m.serverContent?.generationComplete || m.serverContent?.turnComplete) done();
+          },
+          onerror: () => done(),
+          onclose: () => done(),
+        },
+      });
+      const pcm = Buffer.from(audio.data, "base64");
+      session.sendRealtimeInput({ activityStart: {} });
+      for (let i = 0; i < pcm.length; i += CHUNK_BYTES) session.sendRealtimeInput({ audio: { data: pcm.subarray(i, i + CHUNK_BYTES).toString("base64"), mimeType: audio.mimeType } });
+      session.sendRealtimeInput({ activityEnd: {} });
+      await finished;
+    } catch (e) {
+      log("transcribe failed", e instanceof Error ? e.message : e);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      session?.close();
+    }
+    log("transcribed", JSON.stringify(text.trim()));
+    return text.trim();
+  }
+
   return {
     async run(req) {
+      // The longer of the two transcripts wins (the agent's own one is cut short once it starts answering).
+      let best = "";
+      const offer = (t: string) => {
+        if (t.length <= best.length) return;
+        best = t;
+        req.onTranscript?.(t);
+      };
+      const heard = opts.transcribeModel ? transcribe(opts.transcribeModel, req.audio, req.signal) : Promise.resolve("");
+      void heard.then(offer);
+      const r = { ...req, onTranscript: offer };
+      let out: { transcript: string; text: string };
       try {
-        return await once(req);
+        out = await once(r);
       } catch (e) {
         // Nothing ran yet, so a fresh session is safe; one retry only (the turn has a 40 s budget).
         if (!(e instanceof LiveStallError) || e.toolsRan || req.signal.aborted) throw e;
         log("retrying after stall");
-        return await once(req);
+        out = await once(r);
       }
+      offer(out.transcript);
+      offer(await Promise.race([heard, new Promise<string>((ok) => setTimeout(() => ok(""), 3000))]));
+      return { transcript: best, text: out.text };
     },
   };
 }
