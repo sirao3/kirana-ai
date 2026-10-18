@@ -1,6 +1,36 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cx, Icon, IconButton } from "./core";
 
+/**
+ * Opens/closes a native modal <dialog> and returns focus to whatever opened it. Browsers restore focus on close()
+ * themselves, but not when the trigger was re-rendered or the dialog was unmounted, so remember it explicitly.
+ */
+export function useModalDialog(ref: React.RefObject<HTMLDialogElement | null>, open: boolean) {
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      d.showModal();
+    }
+    if (!open && d.open) {
+      d.close();
+      const o = opener.current;
+      opener.current = null;
+      if (o && o.isConnected) o.focus();
+    }
+  }, [open, ref]);
+  useEffect(
+    () => () => {
+      // Unmounted while open (e.g. route change): still hand focus back.
+      const o = opener.current;
+      if (o && o.isConnected) o.focus();
+    },
+    [],
+  );
+}
+
 // ---------- Dialog (native <dialog>: focus trap, Esc and inert background come from the browser) ----------
 
 export function Dialog({
@@ -21,12 +51,7 @@ export function Dialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
+  useModalDialog(ref, open);
 
   return (
     <dialog
@@ -72,12 +97,7 @@ export function Dialog({
 
 export function BottomSheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
+  useModalDialog(ref, open);
   return (
     <dialog
       ref={ref}
@@ -191,11 +211,13 @@ export function Menu({ trigger, items, header, align = "end" }: {
               setOpen(false);
               (box.current?.firstElementChild as HTMLElement | null)?.focus();
             }
-            if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+            if (e.key === "Tab") return setOpen(false);
+            if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
             e.preventDefault();
             const els = [...e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
             const i = els.indexOf(document.activeElement as HTMLElement);
-            els[(i + (e.key === "ArrowDown" ? 1 : -1) + els.length) % els.length]?.focus();
+            const next = e.key === "Home" ? 0 : e.key === "End" ? els.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + els.length) % els.length;
+            els[next]?.focus();
           }}
         >
           {header && <div className="px-3 pb-2 pt-1">{header}</div>}
@@ -206,6 +228,7 @@ export function Menu({ trigger, items, header, align = "end" }: {
               className="state-layer flex min-h-12 w-full cursor-pointer items-center gap-3 px-3 text-left text-on-surface focus-visible:outline-none focus-visible:before:opacity-10"
               onClick={() => {
                 setOpen(false);
+                (box.current?.firstElementChild as HTMLElement | null)?.focus(); // focus returns to the trigger
                 it.onSelect();
               }}
             >

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { paiseToRupees, rupeesToPaise } from "@kiranaai/shared";
 import { api, ApiError } from "../../lib/api";
+import { useMedia } from "../../lib/useMedia";
 import {
   Button, CellField, CircularProgress, Dialog, EmptyState, InlineMessage, SegmentedButton, SelectField, StatusLabel, Switch, TextField, useSnackbar,
 } from "../m3";
@@ -157,6 +158,7 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"add" | "import" | null>(null);
+  const compact = useMedia("(max-width: 599.98px)");
 
   const refresh = () => qc.invalidateQueries({ queryKey: key });
   async function patch(item: CatalogueItem, body: Record<string, unknown>) {
@@ -196,6 +198,28 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
       <TextField label="Filter products" leadingIcon="filter_list" dense className="max-w-sm" value={filter} onValueChange={setFilter} />
       {error && <InlineMessage tone="error">{error}</InlineMessage>}
 
+      {compact ? (
+        // Phones: one card per product with price / stock stacked, instead of a horizontally scrolling table.
+        <ul className="space-y-3" aria-label="Products">
+          {items.map((i) => (
+            <li key={i.listingId} className="rounded-md border border-outline-variant p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className={i.active ? "type-body-large text-on-surface" : "type-body-large text-on-surface-variant"}>{i.brand} {i.name}</p>
+                  <p className="type-body-small text-on-surface-variant">{i.category} · {i.packLabel} · MRP ₹{paiseToRupees(i.mrpPaise)}</p>
+                  {!i.active && <StatusLabel icon="visibility_off" className="mt-1">Inactive</StatusLabel>}
+                </div>
+                <Switch hideLabel label={`${i.name} active`} checked={i.active} onChange={(v) => void patch(i, { active: v }).catch(() => {})} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <div><p className="type-label-medium text-on-surface-variant" aria-hidden>Price</p><EditCell money label={`Price for ${i.name}`} value={paiseToRupees(i.pricePaise)} onSave={(v) => patch(i, { pricePaise: rupeesToPaise(v) })} /></div>
+                <div><p className="type-label-medium text-on-surface-variant" aria-hidden>Stock (packs)</p><EditCell label={`Stock for ${i.name}`} value={String(i.stockQty)} onSave={(v) => patch(i, { stockQty: Number(v) })} /></div>
+              </div>
+            </li>
+          ))}
+          {items.length === 0 && <EmptyState icon="search_off" title="Nothing matches">Try a brand, product or category name.</EmptyState>}
+        </ul>
+      ) : (
       <div className="overflow-x-auto rounded-md border border-outline-variant">
         <table className="w-full min-w-[640px] type-body-medium">
           <thead className="bg-surface-container type-title-small text-on-surface-variant">
@@ -215,7 +239,7 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
                   <p className={i.active ? "type-body-large text-on-surface" : "type-body-large text-on-surface-variant"}>{i.brand} {i.name}</p>
                   <p className="flex items-center gap-2 type-body-small text-on-surface-variant">
                     {i.category}
-                    {!i.active && <StatusLabel icon="visibility_off" className="h-6">Inactive</StatusLabel>}
+                    {!i.active && <StatusLabel icon="visibility_off">Inactive</StatusLabel>}
                   </p>
                 </td>
                 <td className="whitespace-nowrap px-2 py-2 text-on-surface-variant">{i.packLabel}</td>
@@ -235,6 +259,7 @@ export function Catalogue({ storeId, token }: { storeId: string; token: string }
         </table>
         {items.length === 0 && <EmptyState icon="search_off" title="Nothing matches">Try a brand, product or category name.</EmptyState>}
       </div>
+      )}
 
       <AddProductDialog open={dialog === "add"} onClose={() => setDialog(null)} storeId={storeId} token={token} data={q.data} onDone={refresh} />
       <CsvImport open={dialog === "import"} onClose={() => setDialog(null)} storeId={storeId} token={token} onApplied={refresh} />

@@ -186,7 +186,7 @@ export function Switch({ checked, onChange, label, hideLabel, disabled, busy, cl
       aria-busy={busy || undefined}
       disabled={disabled || busy}
       onClick={() => onChange(!checked)}
-      className={cx("group inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full disabled:cursor-not-allowed disabled:opacity-38 focus-visible:outline-none", className)}
+      className={cx("group inline-flex min-h-12 shrink-0 cursor-pointer items-center gap-3 rounded-full disabled:cursor-not-allowed disabled:opacity-38 focus-visible:outline-none", className)}
     >
       {!hideLabel && <span className={cx("type-label-large text-on-surface", labelClassName)}>{label}</span>}
       <span
@@ -229,7 +229,7 @@ export function SegmentedButton<T extends string>({ value, onChange, options, la
   className?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className={cx("inline-flex h-10 overflow-hidden rounded-full border border-outline", className)}>
+    <div role="group" aria-label={label} className={cx("inline-flex min-h-10 overflow-hidden rounded-full border border-outline", className)}>
       {options.map((o, i) => {
         const sel = o.value === value;
         return (
@@ -255,7 +255,7 @@ export function SegmentedButton<T extends string>({ value, onChange, options, la
 
 // ---------- Chips ----------
 
-const CHIP = "state-layer inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border type-label-large disabled:cursor-not-allowed disabled:opacity-38";
+const CHIP = "state-layer inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-2 rounded-sm border type-label-large disabled:cursor-not-allowed disabled:opacity-38";
 
 /** Assist chip: a contextual action related to nearby content. */
 export function AssistChip({ icon, children, className, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string }) {
@@ -294,7 +294,7 @@ export function FilterChip({ selected, children, className, ...rest }: React.But
 /** Input chip: a user-entered item with a remove button. */
 export function InputChip({ children, onRemove, removeLabel }: { children: ReactNode; onRemove: () => void; removeLabel: string }) {
   return (
-    <span className="inline-flex h-8 items-center gap-1 rounded-sm border border-outline-variant pl-3 type-label-large text-on-surface-variant">
+    <span className="inline-flex min-h-8 items-center gap-1 rounded-sm border border-outline-variant pl-3 type-label-large text-on-surface-variant">
       {children}
       <button type="button" aria-label={removeLabel} title={removeLabel} onClick={onRemove} className="state-layer touch-target flex h-8 w-8 cursor-pointer items-center justify-center rounded-full">
         <Icon name="close" size={18} />

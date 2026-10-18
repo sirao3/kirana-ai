@@ -47,7 +47,7 @@ and saves screenshots to `.ui-shots/` (git-ignored). It never uses the agent cha
 ```bash
 pnpm build                       # then (re)start the server: it indexes apps/web/dist at boot
 pnpm ui --url http://127.0.0.1:8095 --passcode demo
-# flags: --widths 412,1440  --themes light,dark  --out .ui-shots  --browser <chrome.exe|msedge.exe>  --no-reset
+# flags: --widths 412,1440  --themes light,dark  --out .ui-shots  --browser <chrome.exe|msedge.exe>  --no-reset  --no-axe  --zoom 2
 ```
 
 - Per width x theme (default 4 runs, 16-17 shots each): landing, shop (Assistant, Search & plan, add Sharma atta,
@@ -56,7 +56,11 @@ pnpm ui --url http://127.0.0.1:8095 --passcode demo
 - It **resets the data** at the start of each run (it needs a clean seed); `--no-reset` skips that.
   Do not point it at a demo in use. After a rebuild without a server restart the new assets are served as
   `index.html` (MIME error): restart the server. Use your own port and database for isolated runs.
-- Exit code 1 on any page error, console error or failed step; the problems are printed. Look at the images.
+- **Accessibility (UX-15):** every screenshot is also scanned with axe-core (`@axe-core/playwright`, WCAG 2.x A/AA +
+  best-practice). Any serious/critical violation is printed and fails the run; moderate/minor counts are summarised.
+  `--no-axe` skips it. `--zoom 2` sets the root font size to 200 % (large-text check, axe skipped): run it with
+  `--widths 412` and look for clipped text. Results and the manual NVDA checklist: `docs/A11Y.md`.
+- Exit code 1 on any page error, console error, axe serious/critical finding or failed step; the problems are printed. Look at the images.
 - Default browser: `C:/Program Files/Google/Chrome/Application/chrome.exe`; on Edge pass
   `--browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"`.
 

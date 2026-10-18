@@ -3,10 +3,15 @@
  *
  *   pnpm ui --url http://127.0.0.1:8091 --passcode demo [--widths 412,1440] [--themes light,dark]
  *           [--out .ui-shots] [--browser "C:/Program Files/Google/Chrome/Application/chrome.exe"] [--no-reset]
+ *           [--no-axe] [--zoom 2]
  *
  * Per width x theme: landing -> persona sign-in -> shop (assistant tab, Search & plan tab, add "Whole Wheat Atta from
  * Sharma", basket) -> verified quote dialog -> approve -> pay -> tracker -> merchant Sharma (offer, Reject..., Accept,
  * Start preparing) -> wall -> admin (gate, Controls, Ledger, Audit). It never uses the agent chat (no Gemini calls).
+ *
+ * Accessibility (UX-15): every screenshot is also scanned with axe-core (WCAG 2.x A/AA + best-practice tags); any
+ * serious or critical violation fails the run. --no-axe skips it. --zoom 2 sets the root font size to 200 % (large-text
+ * check) and skips axe; look at the screenshots for clipping.
  *
  * It RESETS the deployment's data at the start of every width x theme run (use --no-reset to skip; then the flow
  * needs a clean, seeded database). Never run it against a demo that is in use.
@@ -15,6 +20,7 @@
  */
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import AxeBuilder from "@axe-core/playwright";
 import { chromium, type Browser, type Page } from "playwright-core";
 
 function arg(name: string, fallback?: string): string | undefined {
@@ -32,6 +38,8 @@ const WIDTHS = (arg("widths", "412,1440") as string).split(",").map(Number);
 const THEMES = (arg("themes", "light,dark") as string).split(",") as ("light" | "dark")[];
 const OUT = arg("out", ".ui-shots") as string;
 const BROWSER = arg("browser", process.env.UI_BROWSER ?? "C:/Program Files/Google/Chrome/Application/chrome.exe") as string;
+const AXE = arg("no-axe") !== "true" && !arg("zoom");
+const ZOOM = Number(arg("zoom", "1"));
 const RESET = arg("no-reset") !== "true";
 
 if (!BASE || !PASSCODE || WIDTHS.some((w) => !(w > 0)) || THEMES.some((t) => t !== "light" && t !== "dark")) {
@@ -47,6 +55,8 @@ if (!existsSync(BROWSER)) {
 
 const errors: string[] = [];
 let shots = 0;
+let axeScans = 0;
+const axeMinor = new Map<string, number>();
 
 async function sessionFor(body: object): Promise<unknown> {
   const r = await fetch(`${BASE}/auth/persona`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -78,6 +88,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
 
   async function newPage(name: string): Promise<Page> {
     const ctx = await browser.newContext({ viewport: { width, height: tall ? 860 : 900 }, colorScheme: scheme });
+    if (ZOOM !== 1) await ctx.addInitScript(`new MutationObserver((_, o) => { if (document.documentElement) { document.documentElement.style.setProperty("font-size", "${ZOOM * 100}%", "important"); o.disconnect(); } }).observe(document, { childList: true });`);
     const p = await ctx.newPage();
     p.setDefaultTimeout(20_000);
     p.on("pageerror", (e) => errors.push(`${label(name)} pageerror: ${e.message}`));
@@ -91,6 +102,18 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
     n += 1;
     await p.screenshot({ path: join(OUT, `${String(n).padStart(2, "0")}-${name}-${tag}.png`), fullPage });
     shots += 1;
+    if (AXE) {
+      // Animations (scale-in / sheet-up) make axe sample mid-transition colours; wait for them to finish.
+      await p.waitForTimeout(350);
+      const res = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"]).analyze();
+      axeScans += 1;
+      for (const v of res.violations) {
+        if (v.impact === "serious" || v.impact === "critical") {
+          const targets = v.nodes.slice(0, 3).map((nd) => nd.target.join(" ")).join(" | ");
+          errors.push(`${label(name)} axe ${v.impact} ${v.id}: ${v.help} [${v.nodes.length}] e.g. ${targets}`);
+        } else axeMinor.set(v.id, (axeMinor.get(v.id) ?? 0) + 1);
+      }
+    }
   };
   const settle = (p: Page, ms = 700) => p.waitForTimeout(ms);
 
@@ -178,6 +201,12 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   await m.getByRole("button", { name: "Start preparing" }).click();
   await settle(m, 1500);
   await shot(m, "merchant-accepted");
+  // Catalogue: a card list below 600 px, a table above (UX-15).
+  await m.locator('nav[aria-label]:visible').getByText("Catalogue", { exact: true }).click();
+  await m.getByRole("textbox", { name: "Filter products" }).waitFor();
+  await settle(m, 800);
+  await shot(m, "merchant-catalogue", true);
+  await m.locator('nav[aria-label]:visible').getByText("Live", { exact: true }).click();
   await settle(c, 1500);
   await shot(c, "order-after-accept", true);
 
@@ -236,6 +265,7 @@ try {
 }
 
 console.log(`${shots} screenshots in ${OUT}/`);
+if (AXE) console.log(`axe: ${axeScans} scans; moderate/minor (not failing): ${[...axeMinor].map(([k, v]) => `${k}x${v}`).join(", ") || "none"}`);
 if (errors.length) {
   console.error(`\n${errors.length} problem(s):\n${[...new Set(errors)].join("\n")}`);
   process.exit(1);
