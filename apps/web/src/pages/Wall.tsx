@@ -1,39 +1,23 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppShell, BrandMark, Button, CircularProgress, InlineMessage, ThemeToggle, TopAppBar, useSnackbar } from "../components/m3";
 import { unlockAudio } from "../components/merchant/alert";
-import { merchantLogin } from "../components/merchant/StoreChooser";
+import { AudioBanner } from "../components/merchant/AudioBanner";
+import { setAllOnline, useWallTokens } from "../components/merchant/useWallTokens";
 import { StoreTile } from "../components/merchant/StoreDashboard";
-
-interface StoreToken {
-  id: string;
-  name: string;
-  token: string;
-}
 
 /** /wall: all 5 store dashboards side by side. Each uses its own merchant token, so no admin passcode is needed. */
 export function Wall() {
   const qc = useQueryClient();
   const snack = useSnackbar();
   const [working, setWorking] = useState(false);
-  const stores = useQuery<StoreToken[]>({
-    queryKey: ["wall-tokens"],
-    staleTime: Infinity,
-    queryFn: async () => {
-      const { stores } = await api<{ stores: { id: string; name: string }[] }>("/auth/personas");
-      return Promise.all(stores.map(async (s) => ({ ...s, token: (await merchantLogin(s.id)).token })));
-    },
-  });
+  const stores = useWallTokens();
 
   async function allOnline() {
     void unlockAudio(); // first click unlocks audio for every tile
     setWorking(true);
     try {
-      await Promise.all(
-        (stores.data ?? []).map((s) => api(`/bpp/merchant/${s.id}/store`, { method: "PATCH", token: s.token, json: { isOnline: true } })),
-      );
-      await qc.invalidateQueries({ queryKey: ["merchant"] });
+      await setAllOnline(stores.data ?? [], qc);
       snack("All stores are online. Offer sounds are on.");
     } catch {
       snack("Could not bring every store online.");
@@ -61,6 +45,7 @@ export function Wall() {
       }
     >
       <div className="px-4 pb-6 sm:px-6">
+        <AudioBanner className="mb-4" />
         {stores.isError && (
           <InlineMessage tone="error" action={<Button variant="text" onClick={() => void stores.refetch()}>Retry</Button>}>
             Could not load the stores.

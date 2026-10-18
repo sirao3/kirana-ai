@@ -8,6 +8,9 @@ import { Catalogue } from "../components/merchant/Catalogue";
 import { StoreChooser } from "../components/merchant/StoreChooser";
 import { FaultLabels, LiveBoard, OnlineSwitch, StoreError } from "../components/merchant/StoreDashboard";
 import { useStore } from "../components/merchant/useStore";
+import { AudioBanner } from "../components/merchant/AudioBanner";
+import { OfferTakeover } from "../components/merchant/OfferTakeover";
+import { useMedia } from "../lib/useMedia";
 
 type Dest = "live" | "delivered" | "catalogue";
 
@@ -15,6 +18,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
   const s = useStore(session.sub, session.token);
   const [dest, setDest] = useState<Dest>("live");
   const snack = useSnackbar();
+  const compact = useMedia("(max-width: 599.98px)");
   const d = s.d;
 
   // A new offer while the merchant is elsewhere: snackbar with a way back (the sound and badge also signal it).
@@ -69,6 +73,8 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
           )
         ) : (
           <>
+            <AudioBanner className="mb-3" />
+            {compact && <OfferTakeover s={s} />}
             <div className="mb-3 empty:hidden"><FaultLabels faults={d.store.faults} /></div>
             <StoreError s={s} />
             {dest === "live" && (

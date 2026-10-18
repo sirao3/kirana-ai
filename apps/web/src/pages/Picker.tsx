@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { EXPANDED } from "../lib/useMedia";
 import { setSession, type Session } from "../lib/session";
 import { Avatar, Button, Card, CircularProgress, Icon, InlineMessage, ThemeToggle, TopAppBar, BrandMark } from "../components/m3";
 
@@ -68,6 +69,7 @@ export function Picker() {
   const personas = useQuery({ queryKey: ["personas"], queryFn: () => api<Personas>("/auth/personas") });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [popupBlocked, setPopupBlocked] = useState(false);
 
   async function go(key: string, login: Login, to: string) {
     setBusy(key);
@@ -85,11 +87,26 @@ export function Picker() {
   async function startDemo() {
     setBusy("demo");
     setError(null);
-    // Open the wall first (inside the click) so pop-up blockers allow it; it signs itself in.
+    setPopupBlocked(false);
+    // Expanded windows: the one-screen cockpit, no pop-up needed.
+    if (window.matchMedia(EXPANDED).matches) {
+      try {
+        await signIn({ role: "customer", id: DEMO_CUSTOMER });
+        nav("/demo");
+      } catch {
+        setError("Could not start the demo. Is the server running?");
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+    // Compact windows: open the wall first (inside the click) so pop-up blockers allow it; it signs itself in.
     const wall = window.open("/wall", "_blank");
+    if (!wall) setPopupBlocked(true);
     try {
       await signIn({ role: "customer", id: DEMO_CUSTOMER });
-      nav("/shop");
+      if (wall) nav("/shop");
+      // Pop-up blocked: stay here so the presenter sees why and can open the wall by hand.
     } catch {
       wall?.close();
       setError("Could not start the demo. Is the server running?");
@@ -123,7 +140,7 @@ export function Picker() {
               <Button size="lg" icon="play_arrow" expressive loading={busy === "demo"} disabled={busy !== null} onClick={startDemo}>
                 {busy === "demo" ? "Starting demo…" : "Start demo"}
               </Button>
-              <p className="max-w-xs type-body-medium">Signs you in as Priya and opens the live store wall in a new tab.</p>
+              <p className="max-w-xs type-body-medium">Signs you in as Priya and opens the one-screen demo cockpit: the customer, all five stores and a guided script.</p>
             </div>
           </div>
           <ol className="relative z-10 mt-10 space-y-3 md:mt-0" aria-label="How it works">
@@ -149,6 +166,22 @@ export function Picker() {
         </section>
 
         {error && <InlineMessage tone="error" className="mt-4">{error}</InlineMessage>}
+        {popupBlocked && (
+          <InlineMessage
+            tone="warning"
+            icon="open_in_new"
+            className="mt-4"
+            title="Your browser blocked the store wall"
+            action={
+              <span className="flex flex-wrap gap-1">
+                <a className="state-layer inline-flex h-10 items-center rounded-full px-4 type-label-large text-primary" href="/wall" target="_blank" rel="noreferrer">Open store wall</a>
+                <Button variant="text" onClick={() => nav("/shop")}>Continue to shop</Button>
+              </span>
+            }
+          >
+            Allow pop-ups for this site, or open the wall yourself. You are signed in as Priya in this tab.
+          </InlineMessage>
+        )}
         {personas.isError && (
           <InlineMessage tone="error" className="mt-4" action={<Button variant="text" onClick={() => void personas.refetch()}>Retry</Button>}>
             Could not load the demo personas. Check that the server is running.

@@ -27,7 +27,7 @@ export function CountdownRing({ offeredAt, expiresAt, size = 56 }: { offeredAt: 
         />
       </svg>
       <span className={cx("absolute inset-0 flex flex-col items-center justify-center tabular-nums leading-none", urgent ? "text-error" : "text-on-surface")} aria-hidden>
-        <span className={size > 48 ? "type-title-medium" : "type-label-large"}>{secs}</span>
+        <span className={size >= 100 ? "type-display-small type-emphasized" : size > 48 ? "type-title-medium" : "type-label-large"}>{secs}</span>
         {size > 48 && <span className="type-label-small text-on-surface-variant">sec</span>}
       </span>
     </div>
