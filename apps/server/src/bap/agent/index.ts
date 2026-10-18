@@ -6,6 +6,7 @@ import { audit } from "../../beckn/audit.js";
 import { requireAuth } from "../../lib/auth.js";
 import { makeToolClient, ToolForbiddenError, type ToolClient } from "./client.js";
 import { createFakeLlm } from "./fake-llm.js";
+import { REFUSAL_TEXT, screenInput, screenReply, type ScreenResult } from "./guardrails.js";
 import { createGeminiLive, createLiveFromLlm, VOICE_BYTES_PER_SECOND, VOICE_MIME, type LiveAgent } from "./live.js";
 import { createGeminiLlm, type Content, type Llm } from "./llm.js";
 import { SYSTEM_PROMPT } from "./prompt.js";
@@ -90,11 +91,18 @@ export async function runTurn(opts: {
   message: string;
   client: ToolClient;
   signal: AbortSignal;
-} & ToolHooks): Promise<{ reply: AgentReply; created: Content[] }> {
+} & ToolHooks): Promise<{ reply: AgentReply; created: Content[]; refused?: GuardrailRefusal }> {
   const { llm, client, signal } = opts;
   const events: AgentEvent[] = [];
   const steps: AgentReply["steps"] = [];
   const created: Content[] = [{ role: "user", parts: [{ text: opts.message }] }];
+
+  // Guardrail: injection and clearly off-scope requests are refused without a model call (and without tools).
+  const screen = screenInput(opts.message);
+  if (!screen.ok) {
+    created.push({ role: "model", parts: [{ text: REFUSAL_TEXT }] });
+    return { reply: { text: REFUSAL_TEXT, events, steps }, created, refused: screen.reason };
+  }
   let text = "";
   const env: ToolEnv = { client, events, userMessage: opts.message };
   const tools = makeToolExecutor({ env, steps, signal, onToolStart: opts.onToolStart, onTool: opts.onTool });
@@ -105,7 +113,12 @@ export async function runTurn(opts: {
     created.push(modelContent); // unchanged: Gemini 3 thoughtSignature must survive
     const fcs = (modelContent.parts ?? []).flatMap((p) => (p.functionCall ? [p.functionCall] : []));
     if (!fcs.length) {
-      text = textOf(modelContent);
+      const checked = screenReply(textOf(modelContent));
+      text = checked.text;
+      if (checked.leaked) {
+        created[created.length - 1] = { role: "model", parts: [{ text }] }; // never persist the leaked text either
+        return { reply: { text, events, steps }, created, refused: "prompt_leak" };
+      }
       break;
     }
     const responses = await tools.run(fcs);
@@ -114,6 +127,9 @@ export async function runTurn(opts: {
 
   return { reply: { text: text || FALLBACK_TEXT, events, steps }, created };
 }
+
+/** Why a turn's reply was replaced by REFUSAL_TEXT (audited as agent.refused). */
+export type GuardrailRefusal = Extract<ScreenResult, { ok: false }>["reason"] | "prompt_leak";
 
 /**
  * One voice turn (UX-12) on a Gemini Live model. Persists only the transcript and the reply text, so later text turns
@@ -125,7 +141,7 @@ export async function runVoiceTurn(opts: {
   audio: { mimeType: string; data: string };
   client: ToolClient;
   signal: AbortSignal;
-} & ToolHooks): Promise<{ reply: AgentReply; created: Content[] }> {
+} & ToolHooks): Promise<{ reply: AgentReply; created: Content[]; refused?: GuardrailRefusal }> {
   const events: AgentEvent[] = [];
   const steps: AgentReply["steps"] = [];
   const env: ToolEnv = { client: opts.client, events, userMessage: "" };
@@ -138,9 +154,11 @@ export async function runVoiceTurn(opts: {
     onToolCalls: (fcs) => tools.run(fcs),
   });
   const transcript = out.transcript;
+  // The transcript only exists once the Live model has heard it, so voice gets the reply check, not the input screen.
+  const checked = screenReply(out.text);
   // No reply text (the Live session went quiet) but tools ran: say what changed, from the events, not a generic failure.
   const text =
-    out.text ||
+    checked.text ||
     (events.some((e) => e.type === "approval_requested")
       ? "Your basket is quoted. Review the total and press Approve, then Pay."
       : events.length
@@ -152,7 +170,7 @@ export async function runVoiceTurn(opts: {
     { role: "user", parts: [{ text: transcript || "(voice message)" }] },
     { role: "model", parts: [{ text }] },
   ];
-  return { reply: { text, events, steps, transcript }, created };
+  return { reply: { text, events, steps, transcript }, created, ...(checked.leaked ? { refused: "prompt_leak" as const } : {}) };
 }
 
 /** Gemini shopping agent (/bap/agent/*). Tools call the BAP API over loopback HTTP with an allowlist (no approve/pay). */
@@ -258,7 +276,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         ? runVoiceTurn({ live: liveAgent!, history, audio: voice, client, signal: ac.signal, ...hooks })
         : runTurn({ llm: model!, history, message: body.data.message!, client, signal: ac.signal, ...hooks });
       turn.catch(() => undefined); // if the deadline wins, don't leave an unhandled rejection
-      const { reply: out, created } = await Promise.race([turn, deadline]);
+      const { reply: out, created, refused } = await Promise.race([turn, deadline]);
+      if (refused) await audit(pool, { kind: "state", action: "agent.refused", actor: "bap", entityId: customerId, payload: { reason: refused, ...(voice ? { voice: true } : {}) } });
       // Persist only completed turns, so history never ends with a dangling function call.
       for (const c of created) {
         await pool.query("INSERT INTO bap.agent_message (customer_id, role, content) VALUES ($1, $2, $3)", [customerId, c.role ?? "model", JSON.stringify(c)]);

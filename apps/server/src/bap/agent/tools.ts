@@ -12,6 +12,7 @@ import {
   type SearchResponse,
 } from "@kiranaai/shared";
 import type { ToolClient } from "./client.js";
+import { AGENT_MAX_QTY } from "./guardrails.js";
 import { qtyStatedByCustomer } from "./qty.js";
 
 export const MAX_TOOL_CALLS = 8;
@@ -106,7 +107,8 @@ const apiFail = (r: { status: number; body: unknown }): ToolRun => {
   return { ok: false, result: { error: b.error ?? `http_${r.status}`, message: b.message, details: b.details } };
 };
 
-const isPosInt = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1;
+/** Integer pack count from 1 to AGENT_MAX_QTY (guardrail: the agent cannot fill a basket with hundreds of packs). */
+const isPosInt = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= AGENT_MAX_QTY;
 const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
 
 function pushLoose(events: AgentEvent[], list: LooseDeclined[] | undefined) {
@@ -183,7 +185,7 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
       const needs = Array.isArray(args.needs) ? (args.needs as Args[]) : [];
       if (!needs.length) return fail("bad_args", "needs must be a non-empty list");
       for (const n of needs) {
-        if (typeof n.query !== "string" || !isPosInt(n.qty)) return fail("bad_args", "each need needs a query and an integer qty >= 1");
+        if (typeof n.query !== "string" || !isPosInt(n.qty)) return fail("bad_args", `each need needs a query and an integer qty from 1 to ${AGENT_MAX_QTY}`);
       }
       const budget = typeof args.budget_rupees === "number" ? Math.round(args.budget_rupees * 100) : undefined;
       const r = await client.call("POST", "/bap/plan", { needs: needs.map((n) => ({ query: n.query, qty: n.qty })), ...(budget ? { budgetPaise: budget } : {}) });
@@ -210,7 +212,7 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
       const items = Array.isArray(args.items) ? (args.items as Args[]) : [];
       if (!items.length) return fail("bad_args", "items must be a non-empty list");
       for (const i of items) {
-        if (typeof i.listing_id !== "string" || !isPosInt(i.qty)) return fail("bad_args", "each item needs listing_id and an integer qty >= 1");
+        if (typeof i.listing_id !== "string" || !isPosInt(i.qty)) return fail("bad_args", `each item needs listing_id and an integer qty from 1 to ${AGENT_MAX_QTY}`);
       }
       // Reasons and "suggested qty" flags come from the last plan_basket result held server-side, never from model text.
       const planned = new Map((env.plan?.choices ?? []).map((c) => [c.offer.listingId, c]));
@@ -229,7 +231,7 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
       return { ok: true, result: basketForModel(r.body as BasketView) };
     }
     case "update_item": {
-      if (typeof args.listing_id !== "string" || !isPosInt(args.qty)) return fail("bad_args", "listing_id and integer qty >= 1 required");
+      if (typeof args.listing_id !== "string" || !isPosInt(args.qty)) return fail("bad_args", `listing_id and integer qty from 1 to ${AGENT_MAX_QTY} required`);
       const r = await client.call("PATCH", `/bap/basket/items/${encodeURIComponent(args.listing_id)}`, { qty: args.qty });
       if (r.status !== 200) return apiFail(r);
       pushOnce(events, { type: "basket_updated" });
