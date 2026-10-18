@@ -120,7 +120,7 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   // 1. Landing.
   const c = await newPage("customer");
   await c.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await c.getByRole("button", { name: /Start demo/ }).waitFor();
+  await c.getByRole("button", { name: /Start the live demo/ }).waitFor();
   await settle(c, 500);
   await shot(c, "landing", true);
 

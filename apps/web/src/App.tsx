@@ -2,9 +2,9 @@ import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 import { useThemeSync } from "./lib/theme";
 import { CircularProgress } from "./components/m3";
-import { Picker } from "./pages/Picker";
 
-// Route-level code splitting: only the landing page ships in the entry chunk.
+// Route-level code splitting: every page is its own chunk; the boot skeleton in index.html covers the first load.
+const Picker = lazy(() => import("./pages/Picker").then((m) => ({ default: m.Picker })));
 const Shop = lazy(() => import("./pages/Shop").then((m) => ({ default: m.Shop })));
 const Orders = lazy(() => import("./pages/Orders").then((m) => ({ default: m.Orders })));
 const Merchant = lazy(() => import("./pages/Merchant").then((m) => ({ default: m.Merchant })));
@@ -13,6 +13,8 @@ const Demo = lazy(() => import("./pages/Demo").then((m) => ({ default: m.Demo })
 const Admin = lazy(() => import("./pages/Admin").then((m) => ({ default: m.Admin })));
 
 function RouteFallback() {
+  // The landing page and the cockpit sit on the map colour; keep it while their chunk loads (no flash of the M3 surface).
+  if (["/", "/demo"].includes(window.location.pathname)) return <div className="min-h-dvh" style={{ background: "#F3F1EC" }} role="status" aria-label="Loading" />;
   return (
     <div className="flex min-h-dvh items-center justify-center bg-surface" role="status" aria-label="Loading">
       <CircularProgress size={32} className="text-primary" />

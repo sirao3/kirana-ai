@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="KiranaAI: agentic commerce for kirana stores on Beckn/ONDC." />
-    <meta name="theme-color" content="#f8fbf0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#F3F1EC" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#11140f" media="(prefers-color-scheme: dark)" />
     <title>KiranaAI</title>
     <script>
@@ -17,19 +17,15 @@
       })();
     </script>
     <style>
-      /* Critical-path skeleton: paints before JS. Colours mirror the M3 tokens in src/index.css. */
-      html { --s: #f8fbf0; --sc: #ecefe5; --pc: #c1efaf; }
-      html[data-theme="dark"] { --s: #11140f; --sc: #1d211b; --pc: #294f20; }
-      body { margin: 0; background: var(--s); }
-      #boot { min-height: 100vh; background: var(--s); }
-      #boot .bar { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
-      #boot .dot { width: 40px; height: 40px; border-radius: 12px; background: var(--pc); }
-      #boot .line { height: 14px; width: 110px; border-radius: 7px; background: var(--sc); }
-      #boot .hero { margin: 8px 16px 0; height: 320px; max-width: 1168px; border-radius: 28px; background: var(--pc); }
-      #boot .cards { display: grid; gap: 16px; margin: 40px 16px 0; max-width: 1168px; }
-      #boot .card { height: 140px; border-radius: 12px; background: var(--sc); }
-      @media (min-width: 768px) { #boot .cards { grid-template-columns: repeat(3, 1fr); } #boot .hero { height: 360px; } }
-      @media (min-width: 1232px) { #boot .hero, #boot .cards { margin-left: auto; margin-right: auto; } }
+      /* Critical-path skeleton: paints before JS. Mirrors the landing page: map-coloured stage + the floating card. */
+      body { margin: 0; background: #F3F1EC; }
+      html[data-theme="dark"] body { background: #11140f; }
+      #boot { min-height: 100vh; background: #F3F1EC; }
+      #boot .card { position: absolute; left: 12px; right: 12px; top: 40vh; bottom: 12px; border-radius: 26px; background: rgba(255,255,255,0.86); box-shadow: 0 0 0 0.5px rgba(0,0,0,0.06), 0 18px 50px rgba(0,0,0,0.14); }
+      #boot .line { height: 14px; border-radius: 7px; background: #ECEAE6; margin: 24px 24px 0; }
+      #boot .line.big { height: 36px; margin-top: 40px; width: 70%; }
+      #boot .line.btn { height: 54px; border-radius: 16px; background: #1D1D1F; margin-top: 28px; }
+      @media (min-width: 840px) { #boot .card { left: 16px; right: auto; top: 16px; bottom: 16px; width: 420px; } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -40,9 +36,7 @@
   <body>
     <div id="root">
       <div id="boot" aria-hidden="true">
-        <div class="bar"><span class="dot"></span><span class="line"></span></div>
-        <div class="hero"></div>
-        <div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div>
+        <div class="card"><div class="line" style="width: 30%"></div><div class="line big"></div><div class="line"></div><div class="line btn"></div></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

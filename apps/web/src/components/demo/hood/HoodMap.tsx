@@ -15,15 +15,15 @@ import { C, Press, Ring, draw, ease, shortName, soft, spring } from "./kit";
 
 const W = 1600;
 const H = 1000;
-const HOME = { x: 760, y: 500 };
+export const HOME = { x: 760, y: 500 };
 export const SHEET_PX = 452; // the customer card + gaps, in screen px
 const DX = 190; // shift the map so home sits in the middle of the area beside the card (viewBox units)
-const PX_PER_KM = 133;
+export const PX_PER_KM = 133;
 
-type Pt = { x: number; y: number };
+export type Pt = { x: number; y: number };
 
 /** lat/lng → viewBox, equirectangular around home (fine at neighbourhood scale). */
-function project(home: { lat: number; lng: number }, p: { lat: number; lng: number }): Pt {
+export function project(home: { lat: number; lng: number }, p: { lat: number; lng: number }): Pt {
   const kx = 111.32 * Math.cos((home.lat * Math.PI) / 180);
   return { x: HOME.x + (p.lng - home.lng) * kx * PX_PER_KM, y: HOME.y - (p.lat - home.lat) * 110.54 * PX_PER_KM };
 }
@@ -44,7 +44,7 @@ function useViewport(ref: RefObject<HTMLDivElement | null>) {
   return vp;
 }
 
-function routeD(a: Pt) {
+export function routeD(a: Pt) {
   const mx = (a.x + HOME.x) / 2, my = (a.y + HOME.y) / 2;
   const dx = HOME.x - a.x, dy = HOME.y - a.y;
   return `M${a.x},${a.y} Q${mx - dy * 0.22},${my + dx * 0.22} ${HOME.x},${HOME.y}`;
@@ -55,8 +55,8 @@ const NEXT: Record<Exclude<FulfilmentStatus, "DELIVERED">, string> = {
 };
 const STATUS: Record<FulfilmentStatus, string> = { ACCEPTED: "Accepted", PREPARING: "Packing", READY: "Ready", OUT_FOR_DELIVERY: "On the way", DELIVERED: "Delivered" };
 
-type Tone = "idle" | "offer" | "busy" | "done" | "bad" | "off";
-interface PinState { tone: Tone; text?: string; offer?: Offer; active?: Order }
+export type Tone = "idle" | "offer" | "busy" | "done" | "bad" | "off";
+export interface PinState { tone: Tone; text?: string; offer?: Offer; active?: Order }
 
 function pinState(s: StoreState | undefined, storeId: string, order: OrderView | null): PinState {
   const d = s?.d;
@@ -228,7 +228,7 @@ function Routes({ sub, pos }: { sub: SubOrderView; pos: Map<string, Pt> }) {
   );
 }
 
-function Home() {
+export function Home() {
   return (
     <g transform={`translate(${HOME.x},${HOME.y})`}>
       <motion.circle r={46} fill="#007AFF" fillOpacity={0.12} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ ...soft, delay: 0.2 }} />
@@ -241,7 +241,7 @@ function Home() {
 
 const PIN_FILL: Record<Tone, string> = { idle: "#FF9F0A", offer: "#FF9500", busy: C.green, done: C.green, bad: "#8E8E93", off: "#C7C7CC" };
 
-function Pin({ at, name, st }: { at: Pt; name: string; st: PinState }) {
+export function Pin({ at, name, st }: { at: Pt; name: string; st: PinState }) {
   return (
     <g transform={`translate(${at.x},${at.y})`}>
       {st.tone === "offer" && <motion.circle key={st.offer!.id} r={18} fill="none" stroke="#FF9500" strokeWidth={3} initial={{ scale: 1, opacity: 0.8 }} animate={{ scale: 2.6, opacity: 0 }} transition={{ duration: 1.1, ease: "easeOut" }} />}
@@ -352,7 +352,7 @@ function Callout({ rect, side, anchor, name, offer, now, s, reasonOpen, setReaso
 }
 
 /** Light basemap in the Apple Maps palette. Streets are schematic, not survey-accurate. */
-function Basemap() {
+export function Basemap() {
   const majors = [
     { id: "r1", d: "M700,-40 C720,300 690,620 745,1040", name: "100 Feet Road" },
     { id: "r2", d: "M120,400 C640,430 1000,380 1660,300", name: "CMH Road" },

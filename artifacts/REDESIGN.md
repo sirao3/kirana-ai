@@ -21,8 +21,12 @@ Unchanged rules: the total is always the API quote; only the Pay button approves
 
 `node scripts/cockpit-walk.mjs` (resets data): ask → basket → pay ₹1,400 → Sharma accepts, Lakshmi declined → Annapurna accepts, Gupta times out → Balaji accepts (₹40 covered) → all delivered → settled; no page errors. Screens in `.ui-shots/hood/`. Typecheck, shared 10, web 45, server 152 (+2 skipped live-Gemini) pass; `pnpm build` OK.
 
+## Landing page (same language)
+
+`pages/Picker.tsx`: the neighbourhood map is the stage (pinned to the viewport), introduced once — the map settles, the 3 km ring grows, the five pins drop in (real coordinates from the public `GET /bpp/serviceability`), and the §14 plan draws its routes with a "₹1,400 · 3 stores · ₹100 under budget" caption. A glass card carries the headline, one black **Start the live demo** button, three plain how-it-works rows and the roles as grouped rows; hovering a store row lights its pin. Phones: map above, the card scrolls over it. The boot skeleton in `index.html` and the route fallback match it, and the landing page is now a lazy chunk (entry 301 kB). Checked headless at 412, 1440 and 1920 px; Start the live demo → `/demo`.
+
 ## Not done
 
 - Not yet seen in a real (non-headless) browser or with real Gemini; not deployed.
 - Desktop only (the cockpit redirects below 840 px, as before); light only; no axe/NVDA pass on the new cockpit.
-- The rest of the app (`/shop`, merchant, wall, admin) still uses the Material 3 kit.
+- The rest of the app (`/shop`, merchant, wall, admin) still uses the Material 3 kit; the landing page is light-only.
