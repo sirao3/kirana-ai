@@ -151,11 +151,12 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
       {children}
       <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--snackbar-offset,0px)+16px)] z-50 flex justify-center px-4">
         {msg && (
-          <div key={msg.id} className="pointer-events-auto flex min-h-12 w-full max-w-[560px] animate-scale-in items-center gap-2 rounded-xs bg-inverse-surface py-1 pl-4 pr-2 text-inverse-on-surface shadow-3 sm:w-auto sm:min-w-[344px]">
-            <span className="flex-1 py-2 type-body-medium">{msg.text}</span>
+          <div key={msg.id} className="pointer-events-auto flex min-h-12 w-full max-w-[560px] animate-scale-in items-center gap-2 rounded-[14px] py-1 pl-4 pr-1.5 text-white sm:w-auto sm:min-w-[320px]"
+            style={{ background: "rgba(29,29,31,0.92)", backdropFilter: "blur(20px)", boxShadow: "0 12px 32px rgba(0,0,0,0.22)", fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif' }}>
+            <span className="flex-1 py-2 text-[15px]">{msg.text}</span>
             {msg.action && (
               <button
-                className="state-layer h-10 cursor-pointer rounded-full px-3 type-label-large text-inverse-primary"
+                className="h-9 cursor-pointer rounded-[10px] px-3 text-[15px] font-semibold hover:bg-white/10" style={{ color: "#64D2FF" }}
                 onClick={() => {
                   msg.action!.onClick();
                   setMsg(null);
@@ -164,8 +165,8 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
                 {msg.action.label}
               </button>
             )}
-            <button aria-label="Dismiss" title="Dismiss" className="state-layer flex h-10 w-10 cursor-pointer items-center justify-center rounded-full" onClick={() => setMsg(null)}>
-              <Icon name="close" size={20} />
+            <button aria-label="Dismiss" title="Dismiss" className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full opacity-70 hover:bg-white/10" onClick={() => setMsg(null)}>
+              <Icon name="close" size={18} />
             </button>
           </div>
         )}
