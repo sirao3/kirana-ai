@@ -31,7 +31,7 @@ export function CountdownRing({ offeredAt, expiresAt, size = 56 }: { offeredAt: 
         />
       </svg>
       <span className={cx("absolute inset-0 flex flex-col items-center justify-center tabular-nums leading-none", urgent ? "text-error" : "text-on-surface")} aria-hidden>
-        <span className={size > 48 ? "type-title-medium" : "type-label-large"}>{secs}</span>
+        <span className={size >= 100 ? "type-display-small type-emphasized" : size > 48 ? "type-title-medium" : "type-label-large"}>{secs}</span>
         {size > 48 && <span className="type-label-small text-on-surface-variant">sec</span>}
       </span>
     </div>
@@ -40,7 +40,7 @@ export function CountdownRing({ offeredAt, expiresAt, size = 56 }: { offeredAt: 
 
 /** Incoming offer: the merchant's most urgent decision, so it is the one elevated, emphasised card on the board. */
 export function OfferCard({
-  offer, hideActions, compact, tooLate, busy, onAccept, onReject,
+  offer, hideActions, compact, tooLate, busy, onAccept, onReject, rejectRequest,
 }: {
   offer: Offer;
   /** `never_answer` fault: the store can't answer, so the offer will time out. */
@@ -50,9 +50,14 @@ export function OfferCard({
   busy: boolean;
   onAccept: () => void;
   onReject: (reason: string) => void;
+  /** Bumped by the parent (keyboard shortcut R) to open the reject reasons. */
+  rejectRequest?: number;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState(REJECT_REASONS[0]!);
+  useEffect(() => {
+    if (rejectRequest) setRejecting(true);
+  }, [rejectRequest]);
   return (
     <article
       className={cx("animate-scale-in rounded-lg bg-surface-container-lowest shadow-2 ring-2 ring-primary", compact ? "p-3" : "p-4")}
@@ -88,9 +93,9 @@ export function OfferCard({
 
       <div className="mt-3">
         {tooLate ? (
-          <StatusLabel icon="timer_off" className="w-full justify-center">Too late: this offer is no longer available</StatusLabel>
+          <StatusLabel icon="timer_off" className="h-auto min-h-7 w-full justify-center whitespace-normal! py-1">Too late: this offer is no longer available</StatusLabel>
         ) : hideActions ? (
-          <StatusLabel tone="warning" icon="phone_disabled" className="h-auto w-full justify-center whitespace-normal py-1">Not answering (fault injection): this offer will time out</StatusLabel>
+          <StatusLabel tone="warning" icon="phone_disabled" className="h-auto w-full justify-center whitespace-normal! py-1 text-left">Not answering (fault injection): this offer will time out</StatusLabel>
         ) : rejecting ? (
           <fieldset className="space-y-3">
             <legend className="mb-2 type-label-large text-on-surface">Why are you declining?</legend>

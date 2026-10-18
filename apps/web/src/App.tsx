@@ -6,6 +6,7 @@ import { Orders } from "./pages/Orders";
 import { Merchant } from "./pages/Merchant";
 import { Wall } from "./pages/Wall";
 import { Admin } from "./pages/Admin";
+import { Demo } from "./pages/Demo";
 
 export function App() {
   useThemeSync();
@@ -17,6 +18,7 @@ export function App() {
       <Route path="/shop/orders/:id" element={<Orders />} />
       <Route path="/merchant" element={<Merchant />} />
       <Route path="/wall" element={<Wall />} />
+      <Route path="/demo" element={<Demo />} />
       <Route path="/admin" element={<Admin />} />
       <Route path="*" element={<Picker />} />
     </Routes>
