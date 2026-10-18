@@ -42,7 +42,7 @@ export function OrderRow({ order, busy, onAdvance, compact }: { order: Order; bu
           <p className={cx("mt-0.5 text-[13px] leading-[1.4]", compact && "line-clamp-2")} style={{ color: C.secondary }}>{order.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}</p>
           {!compact && (
             <p className="mt-0.5 truncate text-[13px]" style={{ color: C.secondary }} title={order.buyerAddress}>
-              <a href={`tel:${order.buyerPhone.replace(/\s/g, "")}`} className="underline-offset-2 hover:underline" style={{ color: C.blue, fontVariantNumeric: "tabular-nums" }}>{order.buyerPhone}</a> · {order.buyerAddress}
+              <a href={`tel:${order.buyerPhone.replace(/\s/g, "")}`} className="underline underline-offset-2" style={{ color: C.link, fontVariantNumeric: "tabular-nums" }}>{order.buyerPhone}</a> · {order.buyerAddress}
             </p>
           )}
           <div className="mt-2.5">

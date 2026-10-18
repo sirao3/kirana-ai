@@ -11,8 +11,8 @@ export const draw: Transition = { duration: 0.9, ease: [0.65, 0, 0.35, 1] };
 
 export const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif';
 export const C = {
-  bg: "#F5F5F7", label: "#1D1D1F", secondary: "#6E6E73", tertiary: "#8E8E93", sep: "rgba(60,60,67,0.12)", fill: "#F2F2F7",
-  green: "#1F8A3E", red: "#D70015", orange: "#F08A00", blue: "#007AFF", link: "#0062CC", land: "#F3F1EC",
+  bg: "#F5F5F7", label: "#1D1D1F", secondary: "#6E6E73", tertiary: "#6C6C70", sep: "rgba(60,60,67,0.12)", fill: "#F2F2F7",
+  green: "#1A7F37", red: "#D70015", orange: "#F08A00", blue: "#007AFF", link: "#0062CC", land: "#F3F1EC",
 };
 export const glass: CSSProperties = {
   background: "rgba(255,255,255,0.82)",
