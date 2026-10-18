@@ -7,3 +7,5 @@
 **/node_modules
 **/dist
 artifacts
+.ui-shots
+.zoom-shots
