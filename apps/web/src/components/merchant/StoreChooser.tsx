@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { setSession, type Session } from "../../lib/session";
-import { Avatar, BrandMark, Card, CircularProgress, Icon, InlineMessage, ThemeToggle, TopAppBar } from "../m3";
+import { Button, C, FONT, Group, IStore, LargeTitle, Notice, Row, Skeleton, Spinner } from "../ui";
 
 interface Personas {
   stores: { id: string; name: string }[];
@@ -18,6 +19,7 @@ export function StoreChooser({ onChosen }: { onChosen: (s: Session) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   async function choose(id: string) {
+    if (busy) return;
     setBusy(id);
     setError(null);
     try {
@@ -31,27 +33,31 @@ export function StoreChooser({ onChosen }: { onChosen: (s: Session) => void }) {
     }
   }
   return (
-    <div className="min-h-dvh bg-surface">
-      <TopAppBar leading={<BrandMark />} title="Store dashboard" actions={<ThemeToggle />} />
-      <main className="mx-auto max-w-lg px-4 py-6">
-        <h2 className="type-headline-small text-on-surface">Which store are you?</h2>
-        <p className="mb-4 mt-1 type-body-medium text-on-surface-variant">Demo personas: pick a store to open its dashboard. No password needed.</p>
-        {error && <InlineMessage tone="error" className="mb-3">{error}</InlineMessage>}
-        <Card variant="outlined" className="overflow-hidden py-2">
-          <ul>
-            {q.data?.stores.map((s) => (
-              <li key={s.id}>
-                <button className="state-layer flex min-h-14 w-full cursor-pointer items-center gap-4 px-4 py-2 text-left disabled:opacity-60" disabled={busy !== null} onClick={() => void choose(s.id)}>
-                  <Avatar name={s.name} icon="storefront" />
-                  <span className="min-w-0 flex-1 truncate type-body-large text-on-surface">{s.name}</span>
-                  {busy === s.id ? <CircularProgress size={20} className="text-primary" /> : <Icon name="chevron_right" className="text-on-surface-variant" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {q.isLoading && <p className="flex items-center gap-3 px-4 py-3 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading stores…</p>}
-          {q.isError && <p className="px-4 py-3 type-body-medium text-error">Could not load stores.</p>}
-        </Card>
+    <div className="min-h-dvh px-4 pb-16 pt-6 sm:pt-16" style={{ background: C.bg, fontFamily: FONT, color: C.label }}>
+      <main className="mx-auto max-w-[480px]">
+        <Link to="/" className="mb-8 inline-flex items-center gap-2.5" aria-label="KiranaAI home">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[8px] text-[13px] font-bold text-white" style={{ background: C.green }}>K</span>
+          <span className="text-[15px] font-semibold">KiranaAI <span className="font-normal" style={{ color: C.secondary }}>for stores</span></span>
+        </Link>
+        <LargeTitle title="Which store are you?" subtitle="Demo stores, no password needed. Each opens its own dashboard." className="mb-6" />
+        {error && <Notice tone="bad" className="mb-4">{error}</Notice>}
+        {q.isError ? (
+          <Notice tone="bad" title="Could not load the stores" action={<Button variant="plain" size="sm" onClick={() => void q.refetch()}>Retry</Button>} />
+        ) : (
+          <Group footer="You can switch store later from the account menu.">
+            {q.data
+              ? q.data.stores.map((s) => (
+                  <Row key={s.id} title={s.name} onClick={() => void choose(s.id)}
+                    leading={<span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: C.fill, color: C.green }}><IStore size={18} /></span>}
+                    trailing={busy === s.id ? <Spinner /> : undefined} chevron={busy !== s.id} />
+                ))
+              : [0, 1, 2, 3, 4].map((i) => (
+                  <li key={i} className="flex h-[52px] items-center gap-3 px-4 [&+li]:border-t-[0.5px]" style={{ borderColor: C.sep }}>
+                    <Skeleton className="h-8 w-8" /><Skeleton className="h-4 w-40" />
+                  </li>
+                ))}
+          </Group>
+        )}
       </main>
     </div>
   );

@@ -3,78 +3,73 @@ import type { MerchantLedger } from "@kiranaai/shared";
 import { api } from "../../lib/api";
 import { formatINR } from "../../lib/format";
 import { useLive } from "../../lib/live";
-import { Button, Card, CircularProgress, EmptyState, Icon, InlineMessage, SectionHeader, SegmentedButton, StatusLabel } from "../m3";
+import { Button, C, EmptyState, Group, LargeTitle, Money, Notice, Row, Segmented, Skeleton, cardShadow } from "../ui";
 
-type Money = "grossPaise" | "commissionPaise" | "netPayablePaise" | "platformSubsidyPaise";
-const KPIS: { key: Money; label: string; icon: string }[] = [
-  { key: "grossPaise", label: "Gross", icon: "payments" },
-  { key: "commissionPaise", label: "Commission", icon: "percent" },
-  { key: "netPayablePaise", label: "Net payable", icon: "account_balance" },
-  { key: "platformSubsidyPaise", label: "Platform subsidy", icon: "volunteer_activism" },
-];
-
+type Range = "today" | "all";
 const sameDay = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+const dateOf = (iso: string) => (sameDay(iso) ? timeOf(iso) : new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ", " + timeOf(iso));
 
-/** Merchant Earnings (UX-11): stat tiles + one row per delivered order, from this store's ledger. */
+/** Merchant Earnings (UX-11): one summary line of numbers, then the ledger, from this store's ledger (merchant token). */
 export function Earnings({ storeId, token }: { storeId: string; token: string }) {
   const q = useLive<MerchantLedger>(["merchant-ledger", storeId], () => api(`/bpp/merchant/${storeId}/ledger`, { token }));
-  const [range, setRange] = useState<"today" | "all">("today");
+  const [range, setRange] = useState<Range>("today");
 
-  if (q.isError && !q.data) {
-    return (
-      <InlineMessage tone="error" action={<Button variant="text" onClick={() => void q.refetch()}>Retry</Button>}>
-        Could not load earnings ({(q.error as Error).message}).
-      </InlineMessage>
-    );
-  }
-  if (!q.data) return <div className="flex items-center gap-3 py-8 type-body-medium text-on-surface-variant"><CircularProgress size={20} className="text-primary" /> Loading earnings…</div>;
-
-  const entries = range === "today" ? q.data.entries.filter((e) => sameDay(e.createdAt)) : q.data.entries;
-  const sum = (k: Money) => entries.reduce((s, e) => s + e[k], 0);
+  const entries = q.data ? (range === "today" ? q.data.entries.filter((e) => sameDay(e.createdAt)) : q.data.entries) : [];
+  const sum = (k: "grossPaise" | "commissionPaise" | "netPayablePaise" | "platformSubsidyPaise") => entries.reduce((s, e) => s + e[k], 0);
 
   return (
-    <div className="max-w-3xl space-y-4">
-      <SegmentedButton
-        label="Period"
-        value={range}
-        onChange={setRange}
-        options={[{ value: "today", label: "Today" }, { value: "all", label: "All time" }]}
-      />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {KPIS.map((k) => (
-          <Card key={k.key} variant="filled" className="p-4">
-            <p className="flex items-center gap-2 type-label-large text-on-surface-variant"><Icon name={k.icon} size={18} />{k.label}</p>
-            <p className="mt-1 type-headline-small tabular-nums text-on-surface">{formatINR(sum(k.key))}</p>
-          </Card>
-        ))}
-      </div>
-      {entries.length === 0 ? (
-        <Card variant="outlined">
-          <EmptyState icon="account_balance_wallet" title={range === "today" ? "No deliveries settled today" : "No deliveries settled yet"}>
-            Each delivered order appears here with your commission and net payout.
-          </EmptyState>
-        </Card>
+    <div className="space-y-6">
+      <LargeTitle title="Earnings" subtitle="Paid out for every delivered order"
+        actions={<Segmented label="Period" value={range} onChange={setRange} options={[{ value: "today", label: "Today" }, { value: "all", label: "All time" }]} />} />
+
+      {q.isError && !q.data ? (
+        <Notice tone="bad" title="Could not load earnings" action={<Button variant="plain" size="sm" onClick={() => void q.refetch()}>Retry</Button>}>
+          {(q.error as Error).message}
+        </Notice>
+      ) : !q.data ? (
+        <Skeleton className="h-[112px] w-full" style={{ borderRadius: 20 }} />
       ) : (
-        <Card variant="outlined" className="overflow-hidden">
-          <SectionHeader className="p-4" title="Delivered orders" subtitle={`${entries.length} ${entries.length === 1 ? "order" : "orders"}`} />
-          <ul>
-            {entries.map((e) => (
-              <li key={e.id} className="flex items-center gap-4 border-t border-outline-variant px-4 py-3">
-                <Icon name="receipt_long" className="text-on-surface-variant" />
-                <div className="min-w-0 flex-1">
-                  <p className="type-body-large text-on-surface">Order {e.subOrderId.slice(-6)} <span className="type-body-small text-on-surface-variant">· {timeOf(e.createdAt)}</span></p>
-                  <p className="type-body-medium text-on-surface-variant">
+        <>
+          <section aria-label="Summary" className="grid grid-cols-2 gap-y-5 rounded-[20px] bg-white p-5 sm:grid-cols-[1.4fr_1fr_1fr_1fr] sm:gap-y-0 sm:p-6" style={{ boxShadow: cardShadow }}>
+            <div className="col-span-2 sm:col-span-1">
+              <p className="text-[13px] font-medium" style={{ color: C.secondary }}>Net payable</p>
+              <Money value={sum("netPayablePaise")} className="mt-1 block text-[34px] font-bold leading-none tracking-[-0.03em]" style={{ color: C.label }} />
+              <p className="mt-1.5 text-[13px]" style={{ color: C.secondary }}>{entries.length} {entries.length === 1 ? "order" : "orders"}</p>
+            </div>
+            <Stat label="Gross" value={sum("grossPaise")} />
+            <Stat label="Commission" value={sum("commissionPaise")} minus />
+            <Stat label="Platform subsidy" value={sum("platformSubsidyPaise")} tone={sum("platformSubsidyPaise") > 0 ? C.green : undefined} />
+          </section>
+
+          {entries.length === 0 ? (
+            <EmptyState title={range === "today" ? "Nothing settled today" : "Nothing settled yet"}>Each delivered order appears here with your commission and payout.</EmptyState>
+          ) : (
+            <Group title="Delivered orders">
+              {entries.map((e) => (
+                <Row key={e.id}
+                  title={<>Order {e.subOrderId.slice(-6).toUpperCase()} <span style={{ color: C.secondary }}>· {dateOf(e.createdAt)}</span></>}
+                  subtitle={<>
                     Gross {formatINR(e.grossPaise)}{e.commissionPaise ? ` − commission ${formatINR(e.commissionPaise)}` : ""}
-                  </p>
-                  {e.platformSubsidyPaise > 0 && <StatusLabel tone="success" icon="volunteer_activism" className="mt-1">Includes {formatINR(e.platformSubsidyPaise)} platform credit</StatusLabel>}
-                </div>
-                <span className="type-title-medium tabular-nums text-on-surface">{formatINR(e.netPayablePaise)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+                    {e.platformSubsidyPaise > 0 && <span style={{ color: C.green }}> · includes {formatINR(e.platformSubsidyPaise)} platform credit</span>}
+                  </>}
+                  detail={<span className="font-semibold" style={{ color: C.label }}>{formatINR(e.netPayablePaise)}</span>} />
+              ))}
+            </Group>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+function Stat({ label, value, minus, tone }: { label: string; value: number; minus?: boolean; tone?: string }) {
+  return (
+    <div className="sm:border-l-[0.5px] sm:pl-5" style={{ borderColor: C.sep }}>
+      <p className="text-[13px] font-medium" style={{ color: C.secondary }}>{label}</p>
+      <p className="mt-1.5 text-[20px] font-semibold tracking-[-0.01em]" style={{ color: tone ?? C.label, fontVariantNumeric: "tabular-nums" }}>
+        {minus && value > 0 ? "− " : ""}{formatINR(value)}
+      </p>
     </div>
   );
 }
