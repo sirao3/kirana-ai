@@ -129,3 +129,39 @@ describe("admin API (T15)", () => {
     expect(txns.find((x: any) => x.transactionId === "txn_aud").messages).toBe(2);
   });
 });
+
+describe("merchant ledger (UX-11)", () => {
+  let t: Awaited<ReturnType<typeof startTestApp>>;
+  beforeAll(async () => { t = await startTestApp(); });
+  afterAll(() => t.close());
+
+  it("GET /bpp/merchant/:storeId/ledger returns only that store's rows and totals; other stores get 403", async () => {
+    await resetAndSeed(t.pool, { selfBaseUrl: t.url });
+    await t.pool.query("INSERT INTO bap.basket (id, customer_id, transaction_id) VALUES ('bsk_1', 'cust_priya', 'txn_1')");
+    for (const [sub, store, gross, commission, net, subsidy] of [
+      ["sub_1", "store_sharma", 47000, 0, 47000, 0],
+      ["sub_2", "store_balaji", 42000, 2000, 40000, 4000],
+      ["sub_3", "store_balaji", 10000, 0, 10000, 0],
+    ] as const) {
+      await t.pool.query(
+        `INSERT INTO bap.sub_order (id, basket_id, approved_store_id, locked_lines, approved_items_paise, approved_delivery_paise, approved_amount_paise)
+         VALUES ($1, 'bsk_1', $2, '[]', 0, 0, 0)`, [sub, store]);
+      await t.pool.query(
+        `INSERT INTO bap.ledger_entry (id, sub_order_id, basket_id, store_id, gross_paise, commission_paise, net_payable_paise, platform_subsidy_paise)
+         VALUES ($1, $2, 'bsk_1', $3, $4, $5, $6, $7)`, [`led_${sub}`, sub, store, gross, commission, net, subsidy]);
+    }
+    const get = async (storeId: string, token: string | null) => {
+      const r = await fetch(`${t.url}/bpp/merchant/${storeId}/ledger`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+      return { status: r.status, json: (await r.json().catch(() => null)) as any };
+    };
+    const balaji = await tokenFor(t.url, { role: "merchant", id: "store_balaji" });
+    const ok = await get("store_balaji", balaji);
+    expect(ok.status).toBe(200);
+    expect(ok.json.entries.map((e: any) => e.id).sort()).toEqual(["led_sub_2", "led_sub_3"]);
+    expect(ok.json.totals).toEqual({ grossPaise: 52000, commissionPaise: 2000, netPayablePaise: 50000, platformSubsidyPaise: 4000 });
+    expect((await get("store_sharma", balaji)).status).toBe(403);
+    expect((await get("store_balaji", null)).status).toBe(401);
+    const admin = await tokenFor(t.url, { role: "admin", passcode: "demo" });
+    expect((await get("store_nope", admin)).status).toBe(404);
+  });
+});

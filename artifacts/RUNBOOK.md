@@ -28,6 +28,7 @@ Works the same on the hosted URL or a local server (section 3).
    - **Advance** each order until Delivered.
 6. **Check.** The tracker shows each timeline and a SETTLED banner. In `/admin`, the ledger shows
    Balaji's ₹40 subsidy (net ₹1,440 in total) and the audit viewer shows the Beckn messages.
+   Each merchant sees their own share under **Earnings** (Balaji: net ₹420 plus the ₹40 platform credit; Today / All time).
 
 Also try:
 - Search "gehun ka aata" (should find atta) and "250 g jeera" (declined, 100 g pack offered).

@@ -288,6 +288,24 @@ export interface AgentHistoryMessage {
   text: string;
 }
 
+// Merchant earnings (UX-11): GET /bpp/merchant/:storeId/ledger (merchant token, own store only).
+export interface MerchantLedgerEntry {
+  id: string;
+  subOrderId: string;
+  basketId: string;
+  grossPaise: number;
+  commissionPaise: number;
+  netPayablePaise: number;
+  /** Platform top-up when this store was a reassignment pick at a higher price than approved. */
+  platformSubsidyPaise: number;
+  createdAt: string;
+}
+export interface MerchantLedger {
+  storeId: string;
+  entries: MerchantLedgerEntry[];
+  totals: { grossPaise: number; commissionPaise: number; netPayablePaise: number; platformSubsidyPaise: number };
+}
+
 // ---------- Small helpers ----------
 
 export function packLabel(packSize: number, unit: string): string {

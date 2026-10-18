@@ -55,6 +55,30 @@ export const merchantRoutes: FastifyPluginAsync = async (app) => {
   });
   await app.register(catalogueRoutes);
 
+  // UX-11: this store's ledger rows (bap.ledger_entry, same Postgres; see docs/ONDC_DEVIATIONS.md). Scoped by the storeId guard above.
+  app.get<{ Params: { storeId: string } }>("/:storeId/ledger", async (req, reply) => {
+    const { storeId } = req.params;
+    const { rows: st } = await pool.query("SELECT 1 FROM bpp.store WHERE id = $1", [storeId]);
+    if (!st[0]) return reply.code(404).send({ error: "unknown_store" });
+    const { rows } = await pool.query<{
+      id: string; sub_order_id: string; basket_id: string; gross_paise: number; commission_paise: number;
+      net_payable_paise: number; platform_subsidy_paise: number; created_at: Date;
+    }>(
+      `SELECT id, sub_order_id, basket_id, gross_paise, commission_paise, net_payable_paise, platform_subsidy_paise, created_at
+         FROM bap.ledger_entry WHERE store_id = $1 ORDER BY created_at DESC, id`,
+      [storeId],
+    );
+    const entries = rows.map((r) => ({
+      id: r.id, subOrderId: r.sub_order_id, basketId: r.basket_id, grossPaise: r.gross_paise, commissionPaise: r.commission_paise,
+      netPayablePaise: r.net_payable_paise, platformSubsidyPaise: r.platform_subsidy_paise, createdAt: r.created_at.toISOString(),
+    }));
+    const sum = (k: "grossPaise" | "commissionPaise" | "netPayablePaise" | "platformSubsidyPaise") => entries.reduce((a, e) => a + e[k], 0);
+    return {
+      storeId, entries,
+      totals: { grossPaise: sum("grossPaise"), commissionPaise: sum("commissionPaise"), netPayablePaise: sum("netPayablePaise"), platformSubsidyPaise: sum("platformSubsidyPaise") },
+    };
+  });
+
   app.get<{ Params: { storeId: string } }>("/:storeId/dashboard", async (req, reply) => {
     const { storeId } = req.params;
     const { rows: stores } = await pool.query<{ id: string; name: string; is_online: boolean; auto_reject: boolean; never_answer: boolean }>(
