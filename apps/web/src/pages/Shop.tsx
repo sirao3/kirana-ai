@@ -5,14 +5,16 @@ import type { AgentEvent, BasketView, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../lib/format";
 import { useLive } from "../lib/live";
 import { useRequireSession } from "../lib/useSession";
-import { Badge, BottomSheet, Button, CircularProgress, Fab, IconButton, InlineMessage, TabPanel, Tabs } from "../components/m3";
+import { Badge, BottomSheet, Button, CircularProgress, Fab, Icon, IconButton, InlineMessage, TabPanel, Tabs } from "../components/m3";
 import { EXPANDED, useMedia } from "../lib/useMedia";
 import { bap } from "../components/shop/bap";
 import { ApprovalDialog } from "../components/shop/ApprovalCard";
 import { BasketPanel, quoteIsLive } from "../components/shop/BasketPanel";
+import { AddressSheet } from "../components/shop/AddressSheet";
 import { ChatPanel } from "../components/shop/ChatPanel";
 import { CustomerShell } from "../components/shop/CustomerShell";
 import { errorMessage } from "../components/shop/errors";
+import { useAddress } from "../components/shop/useAddress";
 import { ManualPanel } from "../components/shop/ManualPanel";
 
 type Tab = "assistant" | "search";
@@ -30,10 +32,14 @@ export function Shop() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [quoteErrors, setQuoteErrors] = useState<StoreQuoteError[]>([]);
   const [confirmQty, setConfirmQty] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
   const [agentDown, setAgentDown] = useState<"unavailable" | "rate_limited" | null>(null);
 
   const basketQ = useLive(["basket"], bap.basket, { enabled: !!session });
   const wide = useMedia(EXPANDED);
+  const addressQ = useAddress(!!session);
+  const address = addressQ.data;
+  const noDelivery = address?.stores.filter((s) => !s.delivers) ?? [];
 
   const quote = useMutation({
     mutationFn: bap.quote,
@@ -121,7 +127,25 @@ export function Shop() {
       session={session}
       active="shop"
       title="Shop"
-      subtitle={`Shopping as ${session.name}`}
+      subtitle={
+        <button
+          type="button"
+          onClick={() => setAddressOpen(true)}
+          aria-haspopup="dialog"
+          className="state-layer relative -mx-1 inline-flex max-w-full cursor-pointer items-center gap-0.5 rounded-sm px-1 align-top text-on-surface-variant after:absolute after:inset-x-0 after:-inset-y-4 after:content-['']"
+        >
+          <Icon name="location_on" size={16} className="shrink-0" />
+          <span className="truncate" title={address ? `Delivering to ${address.label}` : undefined}>
+            {address ? (
+              <>
+                Delivering to {address.label.split(",")[0]}
+                {address.label.includes(",") && <span className="max-sm:hidden">,{address.label.slice(address.label.indexOf(",") + 1)}</span>}
+              </>
+            ) : addressQ.isError ? "Set delivery address" : "Delivering to…"}
+          </span>
+          <Icon name="arrow_drop_down" size={20} className="shrink-0" />
+        </button>
+      }
       actions={
         !wide && (
           <span className="relative inline-flex">
@@ -134,6 +158,17 @@ export function Shop() {
       <div className="mx-auto flex w-full max-w-[1400px] flex-1 gap-6 px-4 sm:px-6">
         {/* Primary pane */}
         <div className="flex min-w-0 flex-1 flex-col">
+          {address && address.stores.length > 0 && noDelivery.length > 0 && (
+            <InlineMessage
+              tone={noDelivery.length === address.stores.length ? "warning" : "info"}
+              icon="location_on"
+              className="mb-2"
+              title={noDelivery.length === address.stores.length ? "No store delivers to this address" : `${noDelivery.length} of ${address.stores.length} stores don't deliver to you`}
+              action={<Button variant="tonal" size="sm" onClick={() => setAddressOpen(true)}>Change address</Button>}
+            >
+              {noDelivery.map((s) => s.name).join(", ")} {noDelivery.length === 1 ? "is" : "are"} outside the delivery radius for {address.label}, so search and basket plans leave {noDelivery.length === 1 ? "it" : "them"} out.
+            </InlineMessage>
+          )}
           {agentDown && (
             <InlineMessage
               tone="warning"
@@ -199,6 +234,16 @@ export function Shop() {
           requoting={quote.isPending}
         />
       )}
+
+      <AddressSheet
+        open={addressOpen}
+        onClose={() => setAddressOpen(false)}
+        wide={wide}
+        address={address}
+        loading={addressQ.isPending}
+        error={addressQ.error}
+        onRetry={() => void addressQ.refetch()}
+      />
     </CustomerShell>
   );
 }

@@ -31,6 +31,11 @@ contract v1.2.x (`ONDC:RET10`, `core_version` 1.2.0) for the fields we use; see
 | `select` item / `on_select` breakup item | `seen_price` / `price_changed`, `previous_price` | Price-change highlighting (CHK-02). |
 | `confirm` order / `on_confirm` order | `offer_window_seconds` / `expires_at` | Timed offers (DSP-01). |
 
+## Delivery address and serviceability helper (UX-14)
+- The customer's delivery address is BAP profile data (`bap.customer`, `GET/PATCH /bap/profile/address`). It reaches the BPP unchanged as the `search`/`select` `fulfillment.end.location.gps`, so no Beckn payload changed.
+- `GET /bpp/serviceability?lat=&lng=` is a kiranaai helper outside the Beckn action set (no Beckn envelope, no signature): it returns each store's position, delivery radius and distance to the point, for the address sheet and map only. In ONDC a BAP would learn serviceability only from `on_search`. Search and select still decide serviceability themselves.
+- No Google Places autocomplete (no browser key available): the UI offers preset demo addresses (`ADDRESS_PRESETS` in `packages/shared/src/api.ts`); the PATCH route also accepts a custom `{address, lat, lng}`.
+
 ## Not implemented
 Signing and auth headers, `/subscribe`, ONDC log verification, IGM, RSF, `update`, rating,
 support, real payments (simulated), GST invoicing.
