@@ -60,6 +60,21 @@ export interface SearchResponse {
   tookMs: number;
 }
 
+// ---------- Suggestions: GET /bap/suggest?q= → SuggestResponse (autocomplete from the catalogue; synonyms expand in the BPP) ----------
+
+export interface Suggestion {
+  canonicalProductId: string;
+  name: string;
+  packLabel: string;
+  /** Cheapest catalogue price seen across stores. */
+  fromPricePaise: number;
+}
+
+export interface SuggestResponse {
+  query: string;
+  suggestions: Suggestion[];
+}
+
 // ---------- Basket ----------
 // GET    /bap/basket                       → BasketView (customer's open basket; creates a DRAFT if none)
 // PUT    /bap/basket       {items:[{listingId, qty}]}  → BasketView (replace all; agent set_basket)
@@ -226,6 +241,14 @@ export interface OrderView {
 export interface PlanNeed {
   query: string;
   qty: number;
+  /** Optional: only consider offers of this canonical product (used when optimising an existing basket). */
+  canonicalProductId?: string;
+}
+
+/** POST /bap/plan also accepts `current?: {listingId, qty}[]`: the basket being compared, priced into `PlanResult.baseline`. */
+export interface PlanCurrentItem {
+  listingId: string;
+  qty: number;
 }
 
 export interface PlanChoice {
@@ -246,6 +269,8 @@ export interface PlanResult {
   withinBudget: boolean | null;
   /** Basket-level reasons, e.g. "Adding Lakshmi Stores saves ₹38 even after ₹30 delivery". */
   reasons: string[];
+  /** Only when the request carried `current`: catalogue cost of those items as they stand (items + per-store delivery). */
+  baseline?: { estimatedTotalPaise: number; stores: { storeId: string; storeName: string; itemsTotalPaise: number; deliveryPaise: number }[] };
   unmatched: { query: string; reason: string }[];
   looseDeclined: LooseDeclined[];
 }

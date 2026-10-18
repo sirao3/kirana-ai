@@ -11,6 +11,8 @@ import type {
   PlanResult,
   QuoteResponse,
   SearchResponse,
+  SuggestResponse,
+  PlanCurrentItem,
 } from "@kiranaai/shared";
 import { api } from "../../lib/api";
 
@@ -26,8 +28,9 @@ export const bap = {
     api<BasketView>("/bap/basket", { method: "PUT", json: { items, ...(planReasons?.length ? { planReasons } : {}) } }),
   /** "Looks right": clears every suggested-quantity flag. */
   confirmQty: () => api<BasketView>("/bap/basket/confirm-qty", { method: "POST", json: {} }),
-  plan: (needs: PlanNeed[], budgetPaise?: number) =>
-    api<PlanResult>("/bap/plan", { method: "POST", json: { needs, ...(budgetPaise ? { budgetPaise } : {}) } }),
+  suggest: (q: string) => api<SuggestResponse>(`/bap/suggest?q=${encodeURIComponent(q)}`),
+  plan: (needs: PlanNeed[], budgetPaise?: number, current?: PlanCurrentItem[]) =>
+    api<PlanResult>("/bap/plan", { method: "POST", json: { needs, ...(budgetPaise ? { budgetPaise } : {}), ...(current?.length ? { current } : {}) } }),
   quote: () => api<QuoteResponse>("/bap/basket/quote", { method: "POST", json: {} }),
   approve: (basketId: string, quoteHash: string) =>
     api<ApproveResponse>(`/bap/baskets/${encodeURIComponent(basketId)}/approve`, { method: "POST", json: { quoteHash } }),

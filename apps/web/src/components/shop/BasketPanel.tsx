@@ -5,6 +5,7 @@ import { formatINR } from "../../lib/format";
 import { Button, Countdown, EmptyState, Icon, IconButton, InlineMessage, QtyStepper, StatusLabel } from "../m3";
 import { bap } from "./bap";
 import { errorMessage } from "./errors";
+import { OptimiseNudge } from "./OptimiseNudge";
 
 export function quoteIsLive(b: BasketView): boolean {
   return b.status === "QUOTED" && !!b.quote && !b.quote.expired && new Date(b.quote.validUntil).getTime() > Date.now();
@@ -143,6 +144,8 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
               ))}
             </ul>
           )}
+
+          {!live && <OptimiseNudge basket={basket} />}
 
           <div className="space-y-1 px-1">
             {q ? (

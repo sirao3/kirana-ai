@@ -1,6 +1,6 @@
-import { deliveryChargePaise, type LooseDeclined, type PlanNeed, type PlanResult } from "@kiranaai/shared";
+import { deliveryChargePaise, type LooseDeclined, type PlanCurrentItem, type PlanNeed, type PlanResult } from "@kiranaai/shared";
 import type { AppContext } from "../../app.js";
-import { searchOffers, type SeenOffer } from "../offers.js";
+import { getSeenOffers, searchOffers, type SeenOffer } from "../offers.js";
 import type { CustomerRow } from "../util.js";
 import { bestMatchingOffers, planBasket, type PlanStoreInfo } from "./optimiser.js";
 
@@ -22,14 +22,14 @@ export function storeInfoFromOffers(offers: SeenOffer[]): PlanStoreInfo[] {
 export async function planForCustomer(
   ctx: AppContext,
   customer: CustomerRow,
-  body: { needs: PlanNeed[]; budgetPaise?: number | null },
+  body: { needs: PlanNeed[]; budgetPaise?: number | null; current?: PlanCurrentItem[] },
 ): Promise<PlanResult> {
   const searched = await Promise.all(body.needs.map((n) => searchOffers(ctx, customer, { query: n.query })));
   const loose: LooseDeclined[] = [];
   for (const s of searched) loose.push(...s.looseDeclined);
 
   const result = planBasket({
-    needs: body.needs.map((n, i) => ({ query: n.query, qty: n.qty, offers: bestMatchingOffers(n.query, searched[i]!.offers) })),
+    needs: body.needs.map((n, i) => ({ query: n.query, qty: n.qty, offers: bestMatchingOffers(n.query, n.canonicalProductId ? searched[i]!.offers.filter((o) => o.canonicalProductId === n.canonicalProductId) : searched[i]!.offers) })),
     stores: storeInfoFromOffers(searched.flatMap((s) => s.offers)),
     budgetPaise: body.budgetPaise ?? null,
     looseDeclined: loose,
@@ -42,6 +42,25 @@ export async function planForCustomer(
   for (const c of result.choices) {
     const { deliveryRule: _rule, ...offer } = c.offer as SeenOffer;
     c.offer = offer;
+  }
+  if (body.current?.length) {
+    const seen = await getSeenOffers(ctx.pool, customer.id, body.current.map((c) => c.listingId));
+    const stores = storeInfoFromOffers([...searched.flatMap((s) => s.offers), ...seen.values()]);
+    const byStore = new Map<string, { storeName: string; itemsTotalPaise: number }>();
+    for (const c of body.current) {
+      const o = seen.get(c.listingId);
+      if (!o) continue;
+      const cur = byStore.get(o.storeId) ?? { storeName: o.storeName, itemsTotalPaise: 0 };
+      cur.itemsTotalPaise += o.pricePaise * c.qty;
+      byStore.set(o.storeId, cur);
+    }
+    const rows = [...byStore].map(([storeId, v]) => ({
+      storeId,
+      storeName: v.storeName,
+      itemsTotalPaise: v.itemsTotalPaise,
+      deliveryPaise: stores.find((s) => s.storeId === storeId)?.deliveryFor(v.itemsTotalPaise) ?? 0,
+    }));
+    result.baseline = { estimatedTotalPaise: rows.reduce((t, r) => t + r.itemsTotalPaise + r.deliveryPaise, 0), stores: rows };
   }
   return result;
 }
