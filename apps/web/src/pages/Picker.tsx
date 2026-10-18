@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { setSession, type Session } from "../lib/session";
 import { Avatar, Button, Card, CircularProgress, Icon, InlineMessage, ThemeToggle, TopAppBar, BrandMark } from "../components/m3";
@@ -62,10 +62,36 @@ function RoleCard({ icon, title, subtitle, children }: { icon: string; title: st
   );
 }
 
+/** Cold start: ping /health; true once it has been slow (> 1.5 s) and has not answered yet. Clears itself on the first OK. */
+function useWakingServer(): boolean {
+  const [waking, setWaking] = useState(false);
+  const qc = useQueryClient();
+  useEffect(() => {
+    let stop = false;
+    let slow = false;
+    const timer = setTimeout(() => { if (!stop) { slow = true; setWaking(true); } }, 1500);
+    (async () => {
+      for (let i = 0; i < 40 && !stop; i++) {
+        try {
+          if ((await fetch("/health", { cache: "no-store" })).ok) break;
+        } catch { /* not up yet */ }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      clearTimeout(timer);
+      if (stop) return;
+      setWaking(false);
+      if (slow) void qc.invalidateQueries({ queryKey: ["personas"] });
+    })();
+    return () => { stop = true; clearTimeout(timer); };
+  }, [qc]);
+  return waking;
+}
+
 /** Landing page and persona picker. Doubles as the judge-friendly entry point. */
 export function Picker() {
   const nav = useNavigate();
   const personas = useQuery({ queryKey: ["personas"], queryFn: () => api<Personas>("/auth/personas") });
+  const waking = useWakingServer();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +135,11 @@ export function Picker() {
       <TopAppBar leading={<BrandMark />} title="KiranaAI" actions={<ThemeToggle />} />
 
       <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6">
+        {waking && (
+          <InlineMessage tone="info" icon="hourglass_top" className="mt-2">
+            Waking the demo server… this takes a few seconds the first time.
+          </InlineMessage>
+        )}
         {/* Hero: the single expressive moment on this page. */}
         <section className="relative mt-2 overflow-hidden rounded-xl bg-primary-container px-6 py-10 text-on-primary-container sm:px-10 sm:py-14 md:grid md:grid-cols-[1.4fr_1fr] md:gap-10">
           <div className="relative z-10 max-w-2xl">
@@ -149,7 +180,7 @@ export function Picker() {
         </section>
 
         {error && <InlineMessage tone="error" className="mt-4">{error}</InlineMessage>}
-        {personas.isError && (
+        {personas.isError && !waking && (
           <InlineMessage tone="error" className="mt-4" action={<Button variant="text" onClick={() => void personas.refetch()}>Retry</Button>}>
             Could not load the demo personas. Check that the server is running.
           </InlineMessage>
