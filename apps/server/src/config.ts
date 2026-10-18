@@ -14,7 +14,7 @@ const Env = z.object({
   /** Signs persona tokens; defaults to a hash of ADMIN_PASSCODE. */
   AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
   /** Dev only: "1" replaces Gemini with a scripted model (no network). Off by default; never set in production. */
   AGENT_FAKE: z.enum(["0", "1"]).default("0"),
   AGENT_DAILY_CAP: z.coerce.number().int().positive().default(500),

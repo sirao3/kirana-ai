@@ -129,8 +129,11 @@ key's project in Google AI Studio, then do step 3 below.
 5. Check: send the demo prompt in `/shop`. If it still fails, the logs show `429 RESOURCE_EXHAUSTED`
    when quota is the cause.
 
-Model: `GEMINI_MODEL=gemini-3.5-flash` (set by the deploy script). Don't use `gemini-3.8-flash`
-(80–100 s per reply).
+Model: `GEMINI_MODEL=gemini-3.5-flash-lite` (set by the deploy script; switched 18 Oct because the free-tier
+`gemini-3.5-flash` quota of 20 requests/day was exhausted; Flash Lite passed `pnpm e2e --agent`). `gemini-3.5-flash`
+still works by setting the variable. Don't use `gemini-3.8-flash` (80–100 s per reply). The Live models
+(`gemini-3.8-live`, `gemini-3.1-flash-live-preview`) only do WebSocket sessions with audio output, so they need a
+different client; see CLAUDE.md.
 
 ## 6. Cost and cleanup
 

@@ -127,6 +127,10 @@ describe("POST /bap/agent/chat (mocked Gemini)", () => {
   });
 
   it("tool loop builds a basket, quotes it and requests approval; never touches approve/pay", async () => {
+    // Count only this test's audit rows: the test DB may hold rows from earlier e2e/agent runs.
+    const auditCount = async () =>
+      (await t.pool.query("SELECT count(*)::int AS n FROM audit_log WHERE action = 'agent.tool' AND entity_id = 'cust_priya'")).rows[0].n as number;
+    const auditsBefore = await auditCount();
     const bap = fakeBap();
     agentTestHooks.fetchImpl = bap.fetchImpl;
     const { llm } = scriptedLlm([
@@ -154,8 +158,7 @@ describe("POST /bap/agent/chat (mocked Gemini)", () => {
     expect(bap.calls.find((c) => c.method === "PUT")?.body).toEqual({ items: [{ listingId: "lst_atta", qty: 2, reason: "cheapest", qtyInferred: true }] });
     expect(bap.calls.some((c) => /approve|pay/.test(c.path))).toBe(false);
 
-    const audits = await t.pool.query("SELECT count(*)::int AS n FROM audit_log WHERE action = 'agent.tool' AND entity_id = 'cust_priya'");
-    expect(audits.rows[0].n).toBe(4);
+    expect((await auditCount()) - auditsBefore).toBe(4);
   });
 
   it("request_approval without a valid quote emits no approval event", async () => {
@@ -277,7 +280,7 @@ const key = liveKey();
 
 describe.skipIf(!key)("live Gemini smoke", () => {
   it("answers a trivial message through the tool loop with a stub tool", async () => {
-    const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
+    const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
     const llm = createGeminiLlm({ apiKey: key!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
     const bap = fakeBap();
     const client = makeToolClient({ baseUrl: "http://stub", token: "t", fetchImpl: bap.fetchImpl });

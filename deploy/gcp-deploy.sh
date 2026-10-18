@@ -28,7 +28,7 @@ gcloud --project "$PROJECT" run deploy "$SERVICE" --source . --region "$REGION" 
   --allow-unauthenticated \
   --startup-probe "httpGet.path=/health,initialDelaySeconds=0,periodSeconds=2,failureThreshold=15,timeoutSeconds=2" \
   --set-secrets DB_PASSWORD=db-password:latest,ADMIN_PASSCODE=admin-passcode:latest,GEMINI_API_KEY=gemini-api-key:latest \
-  --set-env-vars "DB_HOST=$DB_HOST,DB_PORT=5432,DB_NAME=kiranaai,DB_USER=kiranaai,SELF_BASE_URL=http://127.0.0.1:8080,GEMINI_MODEL=gemini-3.5-flash,OFFER_WINDOW_SECONDS=45"
+  --set-env-vars "DB_HOST=$DB_HOST,DB_PORT=5432,DB_NAME=kiranaai,DB_USER=kiranaai,SELF_BASE_URL=http://127.0.0.1:8080,GEMINI_MODEL=gemini-3.5-flash-lite,OFFER_WINDOW_SECONDS=45"
 
 URL="$(gcloud --project "$PROJECT" run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 echo "URL: $URL"

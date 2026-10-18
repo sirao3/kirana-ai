@@ -149,7 +149,7 @@ The registry can hold more than one BPP. The MVP registers one BPP hosting 5 pro
 | DB | Postgres 16, Drizzle ORM + drizzle-kit; `pg_trgm` for fuzzy search | Raw SQL where it matters (claims, search) |
 | Timers | In-process 1 s interval over Postgres | Restart-safe; no queue |
 | Live updates | TanStack Query polling (1 s on live screens) | Proxy-proof on any host |
-| LLM | **Gemini API** via `@google/genai` with `GEMINI_API_KEY` (key created in Google AI Studio and linked to the project; optionally restricted to the Generative Language API in Cloud Console), function calling. Model: a **Flash** model set by `GEMINI_MODEL` (default **`gemini-3.5-flash`**: measured ~2 s for a simple reply and ~3 s for a turn with two parallel tool calls on 18 Oct 2026; `gemini-3.8-flash` took 80–100+ s per reply and `gemini-2.5-flash` is retired for new keys). Gemini 3 returns `thoughtSignature` on parts; send model turns back unchanged in history so multi-step tool calling keeps working. | Flash is fast and cheap, and enough for tool calling over a small catalogue |
+| LLM | **Gemini API** via `@google/genai` with `GEMINI_API_KEY` (key created in Google AI Studio and linked to the project; optionally restricted to the Generative Language API in Cloud Console), function calling. Model: a **Flash** model set by `GEMINI_MODEL` (default **`gemini-3.5-flash-lite`** since 18 Oct 2026: the free-tier `gemini-3.5-flash` quota ran out, and Flash Lite passed the agent e2e with ~1.5 s per tool call and ~10 s for the demo turn. Earlier measurements for `gemini-3.5-flash`: measured ~2 s for a simple reply and ~3 s for a turn with two parallel tool calls on 18 Oct 2026; `gemini-3.8-flash` took 80–100+ s per reply and `gemini-2.5-flash` is retired for new keys). Gemini 3 returns `thoughtSignature` on parts; send model turns back unchanged in history so multi-step tool calling keeps working. | Flash is fast and cheap, and enough for tool calling over a small catalogue |
 | Web | Vite + React + Tailwind + TanStack Query | Quick to build |
 | Tests | Vitest + one API-level `e2e-demo.ts` script | The demo script is the regression test |
 | Compute | **Cloud Run**, one service in `asia-south1` (Mumbai); min 1 / max 1 instance; CPU always allocated (`--no-cpu-throttling`) so the 1 s sweeper runs between requests. The same container serves the API and the web app. | HTTPS URL, no cold starts, close to Indian users |
@@ -495,7 +495,7 @@ Loose items and fractional quantities; third-party logistics; real payments; liv
 | Very different delivery charges | Each store block shows its own charge; agent explains when adding a store pays for itself. |
 | Redis | Not used. |
 | Sub-order grouping | One per store in the approved basket; reassignment moves the whole sub-order. |
-| LLM | Gemini API with a Google AI Studio API key (in Secret Manager); `gemini-3.5-flash` (chosen on measured latency) with function calling. |
+| LLM | Gemini API with a Google AI Studio API key (in Secret Manager); `gemini-3.5-flash-lite` (18 Oct: switched from `gemini-3.5-flash` for free-tier quota; passed the agent e2e) with function calling. |
 | Hosting | Google Cloud: Cloud Run + Cloud SQL Postgres + Secret Manager + Cloud Logging, region `asia-south1`. |
 
 ### 16.2 Still open (don't block the build)

@@ -50,7 +50,7 @@ pnpm dev:web                    # web app on http://localhost:5173, proxies API 
 
 Open http://localhost:5173 and click **Start demo**. `pnpm seed` reseeds; the admin console can also reset the demo.
 
-Useful environment variables (see `.env.example`): `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-3.5-flash`),
+Useful environment variables (see `.env.example`): `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-3.5-flash-lite`),
 `ADMIN_PASSCODE`, `OFFER_WINDOW_SECONDS` (default 45), `AGENT_DAILY_CAP` (default 500 agent turns per day).
 
 ## Tests
