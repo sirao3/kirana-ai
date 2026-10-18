@@ -170,7 +170,8 @@ function ShopApp({ session }: { session: Session }) {
       {/* Shopping stays mounted (chat, search results) while orders are open. */}
       <div className="flex min-h-0 flex-1 flex-col" style={{ display: view === "shop" ? undefined : "none" }}>
         <Pane active={tab === "assistant"}>
-          <ChatPanel onActive={() => setChatActive(true)} basket={basket} checkout={checkout} tracked={tracked.data ?? null} now={now} onUseSearch={() => setTab("search")} onOpenOrder={(b) => nav(`/shop/orders/${b}`)} />
+          <ChatPanel onActive={() => setChatActive(true)} basket={basket} checkout={checkout} tracked={tracked.data ?? null} now={now} onUseSearch={() => setTab("search")} onOpenOrder={(b) => nav(`/shop/orders/${b}`)}
+            onNewOrder={() => { setTrackId(null); setChatActive(false); }} />
         </Pane>
         <Pane active={tab === "search"}>
           <div className="min-h-0 flex-1 overflow-y-auto px-5" style={{ scrollbarWidth: "none" }}>
@@ -197,7 +198,8 @@ function ShopApp({ session }: { session: Session }) {
           {view === "orders" ? (
             <OrdersList orders={ordersQ.data} error={ordersQ.error} onRetry={() => void ordersQ.refetch()} onShop={() => nav("/shop")} />
           ) : (
-            <OrderPage order={detail.data} error={detail.error} onRetry={() => void detail.refetch()} now={now} />
+            <OrderPage order={detail.data} error={detail.error} onRetry={() => void detail.refetch()} now={now}
+              onNewOrder={() => { void bap.chatReset().catch(() => undefined); setTrackId(null); setTab("assistant"); nav("/shop"); }} />
           )}
         </motion.div>
       )}

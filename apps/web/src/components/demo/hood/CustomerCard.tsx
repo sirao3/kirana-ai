@@ -7,6 +7,7 @@ import { formatINR } from "../../../lib/format";
 import { useLive } from "../../../lib/live";
 import { bap, newIdempotencyKey } from "../../shop/bap";
 import { quoteIsLive } from "../../shop/BasketPanel";
+import { orderFinished } from "../../shop/OrderDetail";
 import { TOOL_LABEL } from "../../shop/ChatPanel";
 import { errorMessage, isAgentDown } from "../../shop/errors";
 import { useVoiceRecorder, voiceSupported } from "../../shop/voice";
@@ -29,7 +30,7 @@ function newTurnId() {
   return globalThis.crypto?.randomUUID?.() ?? `turn_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-export function CustomerCard({ order, now, onLog }: { order: OrderView | null; now: number; onLog: (text: string, tone?: "neutral" | "good" | "bad") => void }) {
+export function CustomerCard({ order, now, onLog, onNewOrder }: { order: OrderView | null; now: number; onLog: (text: string, tone?: "neutral" | "good" | "bad") => void; onNewOrder?: () => void }) {
   const qc = useQueryClient();
   const basketQ = useQueryBasket();
   const basket = basketQ.data;
@@ -198,7 +199,7 @@ export function CustomerCard({ order, now, onLog }: { order: OrderView | null; n
                   <BasketBlock key="basket" basket={basket} total={total} now={now} errors={quoteErrors} suggested={suggested} />
                 )}
               </AnimatePresence>
-              {paid && order && <OrderBlock order={order} now={now} />}
+              {paid && order && <OrderBlock order={order} now={now} onNewOrder={onNewOrder} />}
             </div>
           )}
         </LayoutGroup>
@@ -331,7 +332,7 @@ const mmss = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); retu
 const STAGES = ["ACCEPTED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED"] as const;
 const STAGE_LABEL: Record<string, string> = { ACCEPTED: "Accepted", PREPARING: "Packing", READY: "Ready", OUT_FOR_DELIVERY: "On the way", DELIVERED: "Delivered" };
 
-function OrderBlock({ order, now }: { order: OrderView; now: number }) {
+function OrderBlock({ order, now, onNewOrder }: { order: OrderView; now: number; onNewOrder?: () => void }) {
   return (
     <motion.div layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={soft} className="bg-white" style={{ borderRadius: 22, padding: 18, boxShadow: cardShadow }}>
       <div className="flex items-start justify-between gap-3">
@@ -351,6 +352,11 @@ function OrderBlock({ order, now }: { order: OrderView; now: number }) {
           </motion.p>
         )}
       </AnimatePresence>
+      {onNewOrder && orderFinished(order) && (
+        <Press onClick={onNewOrder} className="mt-4 flex h-[50px] w-full items-center justify-center text-[16px] font-semibold text-white" style={{ background: C.label, borderRadius: 14 }}>
+          Start a new order
+        </Press>
+      )}
     </motion.div>
   );
 }

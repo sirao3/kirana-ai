@@ -18,6 +18,12 @@ const status = (st: DemoState) => Object.fromEntries(deriveSteps(st).map((s) => 
 const current = (st: DemoState) => deriveSteps(st).find((s) => s.status === "current")?.key;
 
 describe("deriveSteps", () => {
+  it("says which view each step happens in", () => {
+    const views = Object.fromEntries(deriveSteps(base).map((s) => [s.key, s.view]));
+    expect(views).toMatchObject({ ask: "customer", pay: "customer", answer: "stores", deliver: "stores" });
+    expect(views.reset).toBeUndefined();
+  });
+
   it("starts at Ask on a clean database", () => {
     expect(current(base)).toBe("ask");
     expect(status(base).reset).toBe("done");

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AgentHistoryMessage, AgentReply, BasketView } from "@kiranaai/shared";
 import { agentTestHooks } from "../src/bap/agent/index.js";
@@ -6,6 +6,7 @@ import { createGeminiLive, createLiveFromLlm, textHistory, type LiveAgent } from
 import type { Content, Llm } from "../src/bap/agent/llm.js";
 import { SYSTEM_PROMPT } from "../src/bap/agent/prompt.js";
 import { TOOL_DECLARATIONS } from "../src/bap/agent/tools.js";
+import { liveBackend } from "./fixtures/gemini-backend.js";
 import { startHarness, type BapHarness } from "./fixtures/harness.js";
 
 const fc = (name: string, args: Record<string, unknown> = {}): Content => ({ role: "model", parts: [{ functionCall: { name, args } }] });
@@ -136,15 +137,9 @@ describe("voice turns: POST /bap/agent/chat {audio} (UX-12, scripted Live agent)
 
 // ---------- live smoke (skipped without a key): real speech through the Gemini Live model ----------
 
-function liveKey(): string | undefined {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-  const envFile = new URL("../../../.env", import.meta.url);
-  if (!existsSync(envFile)) return undefined;
-  return /^GEMINI_API_KEY=(.+)$/m.exec(readFileSync(envFile, "utf8"))?.[1]?.trim();
-}
-const key = liveKey();
+const backend = liveBackend();
 
-describe.skipIf(!key)("live Gemini Live smoke (voice)", () => {
+describe.skipIf(!backend)("live Gemini Live smoke (voice)", () => {
   let h: BapHarness;
   beforeAll(async () => {
     h = await startHarness();
@@ -156,7 +151,7 @@ describe.skipIf(!key)("live Gemini Live smoke (voice)", () => {
 
   it("transcribes 'Where is my order?' and answers through the tools", async () => {
     const model = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
-    agentTestHooks.live = createGeminiLive({ apiKey: key!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-3.5-transcribe-live" });
+    agentTestHooks.live = createGeminiLive({ backend: backend!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: process.env.GEMINI_TRANSCRIBE_MODEL ?? "gemini-3.5-transcribe-live" });
     const pcm = readFileSync(new URL("./fixtures/voice-where-is-my-order.pcm", import.meta.url));
     const started = Date.now();
     const res = await h.call<AgentReply>("POST", "/bap/agent/chat", { audio: audio(pcm.toString("base64")) });

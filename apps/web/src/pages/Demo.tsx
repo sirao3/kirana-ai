@@ -1,21 +1,21 @@
 import { useMemo, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { MotionConfig } from "motion/react";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { MotionConfig, motion } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useLive } from "../lib/live";
 import { getSession, setSession, type Session } from "../lib/session";
 import { EXPANDED, useMedia } from "../lib/useMedia";
 import { useSnackbar } from "../components/ui/toast";
-import { unlockAudio } from "../components/merchant/alert";
+import { unlockAudio, usePendingOfferCount } from "../components/merchant/alert";
 import { setAllOnline, useWallTokens } from "../components/merchant/useWallTokens";
 import { bap } from "../components/shop/bap";
 import { AdminActionDialog, type AdminAction } from "../components/demo/AdminActionDialog";
-import { deriveSteps } from "../components/demo/steps";
+import { deriveSteps, type DemoView } from "../components/demo/steps";
 import { CustomerCard } from "../components/demo/hood/CustomerCard";
 import { HoodMap, SHEET_PX } from "../components/demo/hood/HoodMap";
 import { Activity, Island, useActivity } from "../components/demo/hood/Island";
-import { C, FONT, Spinner, useNow } from "../components/demo/hood/kit";
+import { C, FONT, Spinner, soft, useNow } from "../components/demo/hood/kit";
 
 const DEMO_CUSTOMER = "cust_priya";
 
@@ -57,7 +57,12 @@ export function Demo() {
   const [resetDone, setResetDone] = useState(false);
   const [ledgerOpened, setLedgerOpened] = useState(false);
   const [baseline, setBaseline] = useState<Set<string> | null>(null);
-  const [run, setRun] = useState(0); // remounts the customer card after a reset
+  const [run, setRun] = useState(0); // remounts the customer card after a reset or a new order
+  // One side at a time, as each real user sees it: the customer's app, or the stores (?view=stores).
+  const [params, setParams] = useSearchParams();
+  const view: DemoView = params.get("view") === "stores" ? "stores" : "customer";
+  const setView = (v: DemoView) => setParams(v === "stores" ? { view: v } : {}, { replace: true });
+  const pending = usePendingOfferCount();
 
   const orders = useLive(["demo-orders"], bap.orders, { enabled: ready });
   const basket = useLive(["basket"], bap.basket, { enabled: ready });
@@ -90,6 +95,14 @@ export function Demo() {
     setLedgerOpened(true);
   }
 
+  /** After a finished order: it joins the earlier runs, the chat clears and the card starts fresh. */
+  async function newOrder() {
+    if (order) setBaseline((b) => new Set([...(b ?? []), order.basketId]));
+    activity.clear();
+    await bap.chatReset().catch(() => undefined);
+    setRun((r) => r + 1);
+  }
+
   async function adminDone(action: AdminAction) {
     setAdminAction(null);
     if (action === "reset") {
@@ -109,19 +122,26 @@ export function Demo() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="relative h-dvh overflow-hidden" style={{ fontFamily: FONT, color: C.label }}>
-        <HoodMap address={address.data} stores={stores.data ?? []} order={order} basket={basket.data} now={now} />
+        <HoodMap address={address.data} stores={stores.data ?? []} order={order} basket={basket.data} now={now} controls={view === "stores"} left={view === "customer" ? SHEET_PX : 0} />
 
         {failed ? (
           <p role="alert" className="absolute left-4 top-4 rounded-[18px] bg-white px-5 py-4 text-[15px]" style={{ color: C.red }}>Could not sign in as the demo customer. Is the server running?</p>
         ) : !ready ? (
           <p className="absolute left-4 top-4 flex items-center gap-2 rounded-[18px] bg-white px-5 py-4 text-[15px]" style={{ color: C.secondary }}><Spinner /> Signing in as Priya…</p>
         ) : (
-          <CustomerCard key={run} order={order} now={now} onLog={(t, tone) => activity.add(t, tone)} />
+          // Stays mounted in the Stores view (the chat and the pay sheet keep their state); it just slides away.
+          <motion.div aria-hidden={view !== "customer"} ref={(el) => { if (el) el.inert = view !== "customer"; }} initial={false}
+            animate={view === "customer" ? { x: 0, opacity: 1 } : { x: -460, opacity: 0 }} transition={soft}>
+            <CustomerCard key={run} order={order} now={now} onLog={(t, tone) => activity.add(t, tone)} onNewOrder={() => void newOrder()} />
+          </motion.div>
         )}
 
-        <div className="pointer-events-none absolute right-4 top-4 flex justify-center" style={{ left: SHEET_PX }}>
+        <div className="pointer-events-none absolute right-4 top-4 flex justify-center" style={{ left: view === "customer" ? SHEET_PX : 16 }}>
           <div className="pointer-events-auto">
             <Island
+              view={view}
+              onView={setView}
+              pending={pending}
               steps={steps}
               menu={[
                 { label: "All stores online", onSelect: () => void allOnline() },

@@ -17,7 +17,6 @@ const W = 1600;
 const H = 1000;
 export const HOME = { x: 760, y: 500 };
 export const SHEET_PX = 452; // the customer card + gaps, in screen px
-const DX = 190; // shift the map so home sits in the middle of the area beside the card (viewBox units)
 export const PX_PER_KM = 133;
 
 export type Pt = { x: number; y: number };
@@ -85,12 +84,19 @@ function StoreAgent({ store, into }: { store: StoreToken; into: Map<string, Stor
 type Rect = { x: number; y: number; w: number; h: number };
 const area = (r: Rect, o: Rect) => Math.max(0, Math.min(r.x + r.w, o.x + o.w) - Math.max(r.x, o.x)) * Math.max(0, Math.min(r.y + r.h, o.y + o.h) - Math.max(r.y, o.y));
 
-export function HoodMap({ address, stores, order, basket, now }: {
+/**
+ * `controls`: the store side is live (offer callouts, next-step buttons) — the cockpit's Stores view. Without it the map
+ * only shows status, which is what the customer sees. `left`: screen px covered by a card on the left (home centres in
+ * the rest).
+ */
+export function HoodMap({ address, stores, order, basket, now, controls = true, left = SHEET_PX }: {
   address: AddressView | undefined;
   stores: StoreToken[];
   order: OrderView | null;
   basket: BasketView | undefined;
   now: number;
+  controls?: boolean;
+  left?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const vp = useViewport(box);
@@ -100,6 +106,7 @@ export function HoodMap({ address, stores, order, basket, now }: {
   const pos = new Map<string, Pt>();
   if (address) for (const st of address.stores) pos.set(st.storeId, project(address, st));
   const names = new Map(stores.map((s) => [s.id, s.name]));
+  const DX = (left / 2 - 0) / vp.s; // viewBox units: home sits in the middle of the uncovered area
   const screen = (p: Pt) => ({ x: vp.ox + (DX + p.x) * vp.s, y: vp.oy + p.y * vp.s });
 
   const paid = order?.paymentStatus === "PAID";
@@ -108,8 +115,8 @@ export function HoodMap({ address, stores, order, basket, now }: {
 
   // Offer callouts pick the first side that clears the island, the cards, other pins and other callouts.
   const fixed: Rect[] = [
-    { x: 0, y: 0, w: SHEET_PX, h: vp.h }, // customer card
-    { x: SHEET_PX, y: 0, w: vp.w - SHEET_PX, h: 72 }, // script pill band
+    { x: 0, y: 0, w: left, h: vp.h }, // customer card
+    { x: left, y: 0, w: vp.w - left, h: 72 }, // script pill band
     { x: vp.w - 346, y: vp.h - 220, w: 346, h: 220 }, // activity
     (() => { const q = screen(HOME); return { x: q.x - 30, y: q.y - 30, w: 60, h: 70 }; })(),
   ];
@@ -118,7 +125,7 @@ export function HoodMap({ address, stores, order, basket, now }: {
   for (const s of stores) {
     const st = states.get(s.id);
     const p = pos.get(s.id);
-    if (st?.tone !== "offer" || !p) continue;
+    if (!controls || st?.tone !== "offer" || !p) continue;
     const a = screen(p);
     const cw = 244, ch = reasonFor === st.offer!.id ? 262 : 204;
     const at = (side: "above" | "below" | "left" | "right", dx: number, dy: number) => ({
@@ -146,7 +153,7 @@ export function HoodMap({ address, stores, order, basket, now }: {
     <div ref={box} className="absolute inset-0 overflow-hidden" style={{ background: C.land }}>
       {stores.map((s) => <StoreAgent key={s.id} store={s} into={agents} />)}
       <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label="Map of the stores around the customer's home">
-        <g transform={`translate(${DX},0)`}>
+        <motion.g initial={false} animate={{ x: DX }} transition={{ type: "spring", stiffness: 120, damping: 24 }}>
           <Basemap />
           {address && (
             <motion.circle cx={HOME.x} cy={HOME.y} fill="#007AFF" fillOpacity={0.05} stroke="#007AFF" strokeOpacity={0.18} strokeDasharray="4 8"
@@ -165,7 +172,7 @@ export function HoodMap({ address, stores, order, basket, now }: {
             const cur = sub.attempts.at(-1);
             return sub.status === "OUT_FOR_DELIVERY" && cur && pos.get(cur.storeId) ? <Courier key={sub.id + cur.storeId} from={pos.get(cur.storeId)!} /> : null;
           })}
-        </g>
+        </motion.g>
       </svg>
 
       <div className="pointer-events-none absolute inset-0">
@@ -182,7 +189,7 @@ export function HoodMap({ address, stores, order, basket, now }: {
           {stores.map((s) => {
             const st = states.get(s.id);
             const p = pos.get(s.id);
-            if (st?.tone !== "busy" || !st.active || st.active.fulfilmentStatus === "DELIVERED" || !p) return null;
+            if (!controls || st?.tone !== "busy" || !st.active || st.active.fulfilmentStatus === "DELIVERED" || !p) return null;
             const a = screen(p);
             const agent = agents.get(s.id);
             const next = NEXT[st.active.fulfilmentStatus];

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { OrderView, PaymentStatus, SubOrderView } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
-import { C, CheckDraw, IChevron, Money, Ring, Spinner, cardShadow, ease, shortName, soft, type Tone } from "../ui";
+import { Button, C, CheckDraw, IChevron, Money, Ring, Spinner, cardShadow, ease, shortName, soft, type Tone } from "../ui";
 import { HandoffStrip } from "./HandoffStrip";
 import { priceProtection } from "./handoff";
 import { ReceiptCard } from "./ReceiptCard";
@@ -21,6 +21,11 @@ export function orderSummary(o: OrderView): { tone: Tone; label: string } {
   if (subs.some((s) => s.status === "DISPATCHING")) return { tone: "info", label: "Finding stores" };
   if (subs.some((s) => s.status === "FAILED_NO_FULFILMENT")) return { tone: "warn", label: "Partly refunded" };
   return { tone: "info", label: "On the way" };
+}
+
+/** Settled, or no store could fulfil anything (fully refunded): nothing left to watch on this order. */
+export function orderFinished(o: OrderView): boolean {
+  return o.settled || (o.subOrders.length > 0 && o.subOrders.every((s) => s.status === "FAILED_NO_FULFILMENT"));
 }
 
 export const isInFlight = (o: OrderView) => o.paymentStatus === "PAID" && !o.settled;
@@ -48,7 +53,8 @@ function useStatusAnnouncement(o: OrderView): string {
  * and explains itself ("Lakshmi declined (out of stock) · moved to Annapurna · your price stays ₹550 · KiranaAI covers ₹40").
  * `full` adds items, every step, the handoff sequence, order facts and (once settled) the receipt.
  */
-export function OrderDetail({ order: o, now, full = false, onOpen }: { order: OrderView; now: number; full?: boolean; onOpen?: () => void }) {
+/** `onNewOrder` adds "Start a new order" once the order is finished, so the customer is never left on a dead end. */
+export function OrderDetail({ order: o, now, full = false, onOpen, onNewOrder }: { order: OrderView; now: number; full?: boolean; onOpen?: () => void; onNewOrder?: () => void }) {
   const said = useAttemptAnnouncements(o);
   const statusSaid = useStatusAnnouncement(o);
   const sum = orderSummary(o);
@@ -90,6 +96,9 @@ export function OrderDetail({ order: o, now, full = false, onOpen }: { order: Or
           <button type="button" onClick={onOpen} className="-mx-1 mt-2 flex min-h-11 cursor-pointer items-center gap-1 px-1 text-[14px] font-semibold" style={{ color: LINK }}>
             {o.settled ? "Receipt and details" : "Order details"} <IChevron size={13} />
           </button>
+        )}
+        {onNewOrder && orderFinished(o) && (
+          <Button full size="lg" className="mt-3" onClick={onNewOrder}>Start a new order</Button>
         )}
       </motion.section>
 

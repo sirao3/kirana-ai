@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/pg": "^8",
     "drizzle-kit": "^0.31",
+    "google-auth-library": "10.9.1",
     "tsup": "^8"
   }
 }

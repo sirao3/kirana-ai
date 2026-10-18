@@ -87,7 +87,7 @@ export function StepList({ steps }: { steps: AgentTurnStep[] }) {
  * the same thread becomes the tracker. The agent can only build the basket; an `approval_requested` event at most
  * opens the pay sheet, and only once suggested quantities are confirmed.
  */
-export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenOrder, onActive }: {
+export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenOrder, onActive, onNewOrder }: {
   /** The conversation has content (history or a new message): phones raise the sheet. */
   onActive?: () => void;
   basket: BasketView | undefined;
@@ -96,6 +96,8 @@ export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenO
   now: number;
   onUseSearch: () => void;
   onOpenOrder: (basketId: string) => void;
+  /** After a finished order: the page stops tracking it (the chat clears itself). */
+  onNewOrder?: () => void;
 }) {
   const qc = useQueryClient();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -255,7 +257,9 @@ export function ChatPanel({ basket, checkout, tracked, now, onUseSearch, onOpenO
                   <Button size="sm" variant="primary" onClick={onUseSearch}>Search instead</Button>
                 </motion.div>
               )}
-              {tracked && (isInFlight(tracked) || !hasItems) && <OrderDetail order={tracked} now={now} onOpen={() => onOpenOrder(tracked.basketId)} />}
+              {tracked && (isInFlight(tracked) || !hasItems) && (
+                <OrderDetail order={tracked} now={now} onOpen={() => onOpenOrder(tracked.basketId)} onNewOrder={() => { void newChat(); onNewOrder?.(); input.current?.focus(); }} />
+              )}
               <AnimatePresence initial={false}>
                 {hasItems && basket && <BasketPanel key="basket" basket={basket} now={now} quoteErrors={checkout.quoteErrors} />}
               </AnimatePresence>

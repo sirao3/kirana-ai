@@ -48,6 +48,7 @@ log("sheet");
 await p.getByRole("button", { name: /Approve and pay ₹/ }).click();
 await p.waitForTimeout(700);
 await shot("paying");
+await p.getByRole("tab", { name: /^Stores/ }).click(); // store actions live in the Stores view
 await p.getByRole("alertdialog", { name: /New order for Sharma/ }).waitFor({ timeout: 30000 });
 await p.waitForTimeout(1200);
 await shot("offers");
@@ -82,6 +83,7 @@ for (let i = 0; i < 40; i++) {
   await p.waitForTimeout(label.startsWith("Out for delivery") ? 2500 : 700);
   if (label.startsWith("Out for delivery") && i < 12) await shot("on-the-way");
 }
+await p.getByRole("tab", { name: /^Customer/ }).click();
 await p.waitForTimeout(7000);
 await shot("settled");
 log("done");

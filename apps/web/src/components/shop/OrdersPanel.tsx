@@ -58,8 +58,8 @@ export function OrdersList({ orders, error, onRetry, onShop }: { orders: OrderVi
   );
 }
 
-export function OrderPage({ order, error, onRetry, now }: { order: OrderView | undefined; error: unknown; onRetry: () => void; now: number }) {
-  if (order) return <div className="pt-3"><OrderDetail order={order} now={now} full /></div>;
+export function OrderPage({ order, error, onRetry, now, onNewOrder }: { order: OrderView | undefined; error: unknown; onRetry: () => void; now: number; onNewOrder?: () => void }) {
+  if (order) return <div className="pt-3"><OrderDetail order={order} now={now} full onNewOrder={onNewOrder} /></div>;
   return error ? (
     <p role="alert" className="px-1 pt-4 text-[15px]" style={{ color: DANGER }}>
       Could not load this order: {errorMessage(error)}{" "}

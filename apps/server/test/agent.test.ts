@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Content } from "@google/genai";
 import { agentTestHooks, runTurn } from "../src/bap/agent/index.js";
@@ -6,6 +5,7 @@ import { isAllowedRoute, makeToolClient, ToolForbiddenError } from "../src/bap/a
 import { createGeminiLlm, type Llm } from "../src/bap/agent/llm.js";
 import { SYSTEM_PROMPT } from "../src/bap/agent/prompt.js";
 import { TOOL_DECLARATIONS } from "../src/bap/agent/tools.js";
+import { liveBackend } from "./fixtures/gemini-backend.js";
 import { startTestApp, tokenFor } from "./helpers.js";
 
 // ---------- fakes ----------
@@ -270,18 +270,12 @@ describe("daily cap", () => {
 
 // ---------- live smoke (skipped without a key) ----------
 
-function liveKey(): string | undefined {
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
-  const envFile = new URL("../../../.env", import.meta.url);
-  if (!existsSync(envFile)) return undefined;
-  return /^GEMINI_API_KEY=(.+)$/m.exec(readFileSync(envFile, "utf8"))?.[1]?.trim();
-}
-const key = liveKey();
+const backend = liveBackend();
 
-describe.skipIf(!key)("live Gemini smoke", () => {
+describe.skipIf(!backend)("live Gemini smoke", () => {
   it("answers a trivial message through the tool loop with a stub tool", async () => {
     const model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
-    const llm = createGeminiLlm({ apiKey: key!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
+    const llm = createGeminiLlm({ backend: backend!, model, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
     const bap = fakeBap();
     const client = makeToolClient({ baseUrl: "http://stub", token: "t", fetchImpl: bap.fetchImpl });
     const started = Date.now();

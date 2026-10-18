@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { OrderView } from "@kiranaai/shared";
 import { unlockAudio, useAudioUnlocked } from "../../merchant/alert";
-import type { StepView } from "../steps";
+import type { DemoView, StepView } from "../steps";
 import { C, IMore, ISound, Press, ease, soft } from "./kit";
 
 export interface MenuItem { label: string; hint?: string; onSelect: () => void; danger?: boolean }
 
 /** The script as one Dynamic-Island-style pill: progress ring, the current step and what to do, sound and demo menu. */
-export function Island({ steps, menu }: { steps: StepView[]; menu: MenuItem[] }) {
+/** `view`: which side the cockpit shows (Customer | Stores); the pill switches it and offers to when the next step is on the other side. */
+export function Island({ steps, menu, view, onView, pending }: { steps: StepView[]; menu: MenuItem[]; view: DemoView; onView: (v: DemoView) => void; pending: number }) {
   const sound = useAudioUnlocked();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -43,9 +44,27 @@ export function Island({ steps, menu }: { steps: StepView[]; menu: MenuItem[] })
           <motion.span key={(cur?.key ?? "done") + (cur?.detail ?? "")} layout initial={{ opacity: 0, y: 6, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: -6, filter: "blur(4px)" }} transition={ease} className="flex min-w-0 items-baseline gap-2 whitespace-nowrap text-[14px]">
             <span className="font-semibold">{cur ? cur.label : "Demo complete"}</span>
-            <span className="max-w-[min(560px,40vw)] truncate" style={{ opacity: 0.62 }}>{cur ? (cur.detail ? `${cur.detail} · ${cur.hint}` : cur.hint) : "Reset to run it again"}</span>
+            <span className="max-w-[min(420px,30vw)] truncate" style={{ opacity: 0.62 }}>{cur ? (cur.detail ? `${cur.detail} · ${cur.hint}` : cur.hint) : "Reset to run it again"}</span>
           </motion.span>
         </AnimatePresence>
+        {cur?.view && cur.view !== view && (
+          <motion.span layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={soft}>
+            <Press onClick={() => onView(cur.view!)} className="flex h-8 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-semibold" style={{ background: "#34C759", color: "#06260F" }}>
+              Go to {cur.view === "stores" ? "Stores" : "Customer"} →
+            </Press>
+          </motion.span>
+        )}
+        <motion.span layout role="tablist" aria-label="Show" className="flex items-center rounded-full p-[2px]" style={{ background: "rgba(255,255,255,0.14)" }}>
+          {(["customer", "stores"] as const).map((v) => (
+            <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => onView(v)}
+              aria-label={v === "stores" && pending ? `Stores, ${pending} pending ${pending === 1 ? "offer" : "offers"}` : undefined}
+              className="relative flex h-7 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold">
+              {view === v && <motion.span layoutId="island-view" transition={soft} className="absolute inset-0 rounded-full bg-white" />}
+              <span className="relative" style={{ color: view === v ? "#0B0B0C" : "#fff" }}>{v === "customer" ? "Customer" : "Stores"}</span>
+              {v === "stores" && pending > 0 && <span className="relative flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white" style={{ background: "#FF3B30" }}>{pending}</span>}
+            </button>
+          ))}
+        </motion.span>
         <motion.span layout className="flex items-center gap-1">
           <Press label={sound ? "Offer sounds on" : "Turn on offer sounds"} onClick={() => void unlockAudio()} className="flex h-8 w-8 items-center justify-center rounded-full"
             style={{ background: sound ? "rgba(255,255,255,0.14)" : "#FF9F0A", color: sound ? "#fff" : "#1D1D1F" }}>

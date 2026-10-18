@@ -77,6 +77,7 @@ export function useAudioUnlocked(): boolean {
 // --- looping alert + attention cues while any dashboard has a pending offer ---
 interface Pending { count: number; totalPaise: number }
 const pending = new Map<string, Pending>();
+const pendingListeners = new Set<() => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 let titleTimer: ReturnType<typeof setInterval> | null = null;
 let baseTitle: string | null = null;
@@ -164,6 +165,7 @@ export function setPendingOffers(key: string, hasPending: boolean, info?: Pendin
   else pending.delete(key);
   const after = pending.get(key)?.count ?? 0;
   if (after > before) vibrate();
+  if (after !== before) pendingListeners.forEach((l) => l());
   if (pending.size > 0 && !timer) {
     beep();
     timer = setInterval(() => beep(), 1600);
@@ -175,4 +177,14 @@ export function setPendingOffers(key: string, hasPending: boolean, info?: Pendin
   } else if (pending.size > 0) {
     renderTitle(true);
   }
+}
+
+function subscribePending(cb: () => void): () => void {
+  pendingListeners.add(cb);
+  return () => void pendingListeners.delete(cb);
+}
+
+/** Live count of answerable offers across every mounted store (the cockpit's Stores badge). */
+export function usePendingOfferCount(): number {
+  return useSyncExternalStore(subscribePending, () => attentionTotals().count, () => 0);
 }
