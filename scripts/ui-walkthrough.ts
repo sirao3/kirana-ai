@@ -139,14 +139,16 @@ async function run(browser: Browser, width: number, scheme: "light" | "dark"): P
   const m = await newPage("merchant");
   await signIn(m, { role: "merchant", id: "store_sharma" });
   await m.goto(`${BASE}/merchant`, { waitUntil: "domcontentloaded" });
-  await m.getByRole("button", { name: "Accept", exact: true }).waitFor();
+  // Below 600 px the offer opens as a full-screen takeover (UX-09); act inside it, since the card behind it is inert.
+  const offer = width < 600 ? m.getByRole("dialog") : m.locator("body");
+  await offer.getByRole("button", { name: "Accept", exact: true }).waitFor();
   await settle(m, 500);
   await shot(m, "merchant-offer", tall);
-  await m.getByRole("button", { name: "Reject…" }).click();
+  await offer.getByRole("button", { name: "Reject…" }).click();
   await settle(m, 400);
   await shot(m, "merchant-reject");
-  await m.getByRole("button", { name: "Back" }).click();
-  await m.getByRole("button", { name: "Accept", exact: true }).click();
+  await offer.getByRole("button", { name: "Back" }).click();
+  await offer.getByRole("button", { name: "Accept", exact: true }).click();
   await m.getByRole("button", { name: "Start preparing" }).click();
   await settle(m, 1500);
   await shot(m, "merchant-accepted");
