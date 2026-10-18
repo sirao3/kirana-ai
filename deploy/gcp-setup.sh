@@ -27,7 +27,7 @@ log() { printf '\n==> %s\n' "$*"; }
 
 log "APIs"
 g services enable run.googleapis.com compute.googleapis.com cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com \
+  artifactregistry.googleapis.com secretmanager.googleapis.com generativelanguage.googleapis.com aiplatform.googleapis.com \
   billingbudgets.googleapis.com cloudresourcemanager.googleapis.com
 
 log "Secrets"
@@ -50,6 +50,9 @@ g iam service-accounts describe "$SA" >/dev/null 2>&1 ||
   g iam service-accounts create "$SA_NAME" --display-name="KiranaAI Cloud Run"
 g projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" \
   --role=roles/secretmanager.secretAccessor --condition=None >/dev/null
+# Gemini through Vertex AI (GEMINI_VERTEX=1): the service account calls the models, no API key.
+g projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" \
+  --role=roles/aiplatform.user --condition=None >/dev/null
 # `gcloud run deploy --source` builds with the default compute service account.
 PROJECT_NUMBER="$(g projects describe "$PROJECT" --format='value(projectNumber)')"
 g projects add-iam-policy-binding "$PROJECT" \

@@ -1,4 +1,5 @@
-import { FunctionCallingConfigMode, GoogleGenAI, HarmBlockThreshold, HarmCategory, type Content, type FunctionDeclaration, type SafetySetting } from "@google/genai";
+import { FunctionCallingConfigMode, HarmBlockThreshold, HarmCategory, type Content, type FunctionDeclaration, type SafetySetting } from "@google/genai";
+import { genAiClient, type GeminiBackend } from "./gemini.js";
 import { REFUSAL_TEXT } from "./guardrails.js";
 
 export type { Content };
@@ -20,12 +21,12 @@ export const SAFETY_SETTINGS: SafetySetting[] = [
 const BLOCKED = /SAFETY|PROHIBITED_CONTENT|BLOCKLIST|SPII|IMAGE_SAFETY/;
 
 export function createGeminiLlm(opts: {
-  apiKey: string;
+  backend: GeminiBackend;
   model: string;
   systemInstruction: string;
   declarations: FunctionDeclaration[];
 }): Llm {
-  const ai = new GoogleGenAI({ apiKey: opts.apiKey });
+  const ai = genAiClient(opts.backend, "text");
   return {
     async generate({ contents, allowTools, signal }) {
       const res = await withRetry(signal, () => ai.models.generateContent({

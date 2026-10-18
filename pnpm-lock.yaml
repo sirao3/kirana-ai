@@ -57,6 +57,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31
         version: 0.31.11
+      google-auth-library:
+        specifier: 10.9.1
+        version: 10.9.1
       tsup:
         specifier: ^8
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.30)(tsx@4.23.15)(typescript@5.7.3)

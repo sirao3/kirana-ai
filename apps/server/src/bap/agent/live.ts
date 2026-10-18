@@ -1,4 +1,5 @@
-import { GoogleGenAI, Modality, type FunctionCall, type FunctionDeclaration, type FunctionResponse, type LiveServerMessage, type Session } from "@google/genai";
+import { Modality, type FunctionCall, type FunctionDeclaration, type FunctionResponse, type LiveServerMessage, type Session } from "@google/genai";
+import { genAiClient, type GeminiBackend } from "./gemini.js";
 import { VOICE_MIME_TYPE } from "@kiranaai/shared";
 import type { Content, Llm } from "./llm.js";
 
@@ -54,7 +55,7 @@ export function textHistory(history: Content[], maxTurns = HISTORY_TURNS): Conte
 }
 
 export function createGeminiLive(opts: {
-  apiKey: string;
+  backend: GeminiBackend;
   model: string;
   systemInstruction: string;
   declarations: FunctionDeclaration[];
@@ -67,7 +68,8 @@ export function createGeminiLive(opts: {
   /** LIVE_DEBUG=1: log the server message sequence to stderr. */
   debug?: boolean;
 }): LiveAgent {
-  const ai = new GoogleGenAI({ apiKey: opts.apiKey });
+  const ai = genAiClient(opts.backend, "live");
+  const transcribeAi = genAiClient(opts.backend, "transcribe");
   const stallMs = opts.stallMs ?? STALL_MS;
   const log = (...a: unknown[]) => opts.debug && console.error("[live]", ...a);
 
@@ -193,7 +195,7 @@ export function createGeminiLive(opts: {
     const timer = setTimeout(done, 12_000);
     signal.addEventListener("abort", done, { once: true });
     try {
-      session = await ai.live.connect({
+      session = await transcribeAi.live.connect({
         model,
         config: { responseModalities: [Modality.TEXT], inputAudioTranscription: {}, realtimeInputConfig: { automaticActivityDetection: { disabled: true } } },
         callbacks: {

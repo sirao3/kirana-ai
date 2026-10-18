@@ -50,7 +50,8 @@ pnpm dev:web                    # web app on http://localhost:5173, proxies API 
 
 Open http://localhost:5173 and click **Start demo**. `pnpm seed` reseeds; the admin console can also reset the demo.
 
-Useful environment variables (see `.env.example`): `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-3.5-flash-lite`),
+Useful environment variables (see `.env.example`): `GEMINI_API_KEY`, or `GEMINI_VERTEX=1` + `GOOGLE_CLOUD_PROJECT` for
+Vertex AI (see `artifacts/RUNBOOK.md` §5), `GEMINI_MODEL` (default `gemini-3.5-flash-lite`),
 `ADMIN_PASSCODE`, `OFFER_WINDOW_SECONDS` (default 45), `AGENT_DAILY_CAP` (default 500 agent turns per day).
 
 ## Tests
@@ -62,7 +63,7 @@ pnpm typecheck && pnpm build && pnpm test
 ```
 
 Server tests run against a real Postgres. The agent tests mock Gemini and the loopback tool client; one live Gemini smoke
-test runs only when `GEMINI_API_KEY` is set (in the environment or the root `.env`).
+test runs only when `GEMINI_API_KEY` (or `GEMINI_VERTEX=1`) is set (in the environment or the root `.env`).
 
 ## Deploy
 

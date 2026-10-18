@@ -14,10 +14,18 @@ const Env = z.object({
   /** Signs persona tokens; defaults to a hash of ADMIN_PASSCODE. */
   AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  /** "1": call Gemini through Vertex AI with the service account (ADC) instead of GEMINI_API_KEY. */
+  GEMINI_VERTEX: z.enum(["0", "1"]).default("0"),
+  GOOGLE_CLOUD_PROJECT: z.string().optional(),
+  /** Vertex location for text and transcribe models; Gemini 3.5 text models are served only from `global` (18 Oct). */
+  GEMINI_LOCATION: z.string().default("global"),
+  /** Vertex location for the Live API (voice), which needs a regional endpoint. */
+  GEMINI_LIVE_LOCATION: z.string().default("us-central1"),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
   /** Live API model for voice turns (UX-12). WebSocket only; unlimited requests on the AI Studio key, 65K tokens/min. */
   GEMINI_LIVE_MODEL: z.string().default("gemini-3.8-live"),
-  /** Speech-to-text Live model run alongside voice turns for the shown transcript (UX-12). Empty disables it. */
+  /** Speech-to-text Live model run alongside voice turns for the shown transcript (UX-12). Empty disables it.
+   *  On Vertex it is named `gemini-3.5-transcribe-live-preview` (the deploy script sets that). */
   GEMINI_TRANSCRIBE_MODEL: z.string().default("gemini-3.5-transcribe-live"),
   /** Dev only: "1" replaces Gemini with a scripted model (no network). Off by default; never set in production. */
   AGENT_FAKE: z.enum(["0", "1"]).default("0"),

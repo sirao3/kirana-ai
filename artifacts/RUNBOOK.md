@@ -135,7 +135,29 @@ Logs:
 gcloud logging read 'resource.labels.service_name="kiranaai" AND severity>=WARNING' --limit 20 --freshness=30m
 ```
 
-## 5. Update the Gemini API key
+## 5. Gemini: Vertex AI (hosted default) or the API key
+
+Hosted runs Gemini through **Vertex AI** (since 18 Oct, revision `kiranaai-00016-k8h`): `GEMINI_VERTEX=1`, the
+`kiranaai-run` service account has `roles/aiplatform.user`, usage is billed to `orbi-kirana-hack` (no free-tier daily
+caps; 503 "high demand" can still happen). Vertex serves the models from different locations (probed 18 Oct):
+
+| Model | Vertex name | Location |
+|---|---|---|
+| Text agent | `gemini-3.5-flash-lite` | `global` (`GEMINI_LOCATION`) |
+| Voice agent (Live) | `gemini-3.8-live` | `us-central1` (`GEMINI_LIVE_LOCATION`) |
+| Voice transcript (Live) | `gemini-3.5-transcribe-live-preview` | `global` |
+
+Fall back to the API key without a redeploy:
+```bash
+gcloud run services update kiranaai --region us-central1 \
+  --update-env-vars GEMINI_VERTEX=0,GEMINI_TRANSCRIBE_MODEL=gemini-3.5-transcribe-live
+```
+
+Locally, Vertex needs ADC: `gcloud auth application-default login`, then `GEMINI_VERTEX=1`,
+`GOOGLE_CLOUD_PROJECT=orbi-kirana-hack`, `GEMINI_TRANSCRIBE_MODEL=gemini-3.5-transcribe-live-preview` in `.env`.
+The live smoke tests also accept `GEMINI_ACCESS_TOKEN=$(gcloud auth print-access-token)` instead of ADC.
+
+### Update the Gemini API key
 
 You don't need a new key to lift the free-tier limit (20 requests/day): enable billing for the
 key's project in Google AI Studio, then do step 3 below.

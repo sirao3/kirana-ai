@@ -6,6 +6,7 @@ import { audit } from "../../beckn/audit.js";
 import { requireAuth } from "../../lib/auth.js";
 import { makeToolClient, ToolForbiddenError, type ToolClient } from "./client.js";
 import { createFakeLlm } from "./fake-llm.js";
+import { geminiBackend } from "./gemini.js";
 import { REFUSAL_TEXT, screenInput, screenReply, type ScreenResult } from "./guardrails.js";
 import { createGeminiLive, createLiveFromLlm, VOICE_BYTES_PER_SECOND, VOICE_MIME, type LiveAgent } from "./live.js";
 import { createGeminiLlm, type Content, type Llm } from "./llm.js";
@@ -183,20 +184,21 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   let llm: Llm | null = null;
   let live: LiveAgent | null = null;
   const progress = new TurnProgressStore();
+  const backend = geminiBackend(config);
 
   const getLlm = (): Llm | null => {
     if (agentTestHooks.llm) return agentTestHooks.llm;
     if (config.AGENT_FAKE === "1") return (llm ??= createFakeLlm());
-    if (!config.GEMINI_API_KEY) return null;
-    llm ??= createGeminiLlm({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
+    if (!backend) return null;
+    llm ??= createGeminiLlm({ backend, model: config.GEMINI_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
     return llm;
   };
 
   const getLive = (): LiveAgent | null => {
     if (agentTestHooks.live) return agentTestHooks.live;
     if (config.AGENT_FAKE === "1") return (live ??= createLiveFromLlm(createFakeLlm(), FAKE_VOICE_TRANSCRIPT));
-    if (!config.GEMINI_API_KEY) return null;
-    live ??= createGeminiLive({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_LIVE_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: config.GEMINI_TRANSCRIBE_MODEL || undefined, debug: process.env.LIVE_DEBUG === "1" });
+    if (!backend) return null;
+    live ??= createGeminiLive({ backend, model: config.GEMINI_LIVE_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS, transcribeModel: config.GEMINI_TRANSCRIBE_MODEL || undefined, debug: process.env.LIVE_DEBUG === "1" });
     return live;
   };
 
