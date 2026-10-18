@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, AgentReply } from "@kiranaai/shared";
+import type { AgentEvent, AgentReply, AgentTurnStep } from "@kiranaai/shared";
 import { ApiError } from "../../lib/api";
 import { formatINR } from "../../lib/format";
-import { AssistChip, Button, cx, Icon, IconButton, LoadingDots, StatusLabel, SuggestionChip } from "../m3";
+import { AssistChip, Button, CircularProgress, cx, Icon, IconButton, LoadingDots, StatusLabel, SuggestionChip } from "../m3";
 import { bap } from "./bap";
 import { isAgentDown } from "./errors";
 
@@ -12,6 +12,8 @@ interface Msg {
   text: string;
   events?: AgentEvent[];
   steps?: AgentReply["steps"];
+  /** Last polled progress of the turn (carries summaries); preferred over `steps` in the disclosure. */
+  liveSteps?: AgentTurnStep[];
   failed?: boolean;
 }
 
@@ -47,6 +49,40 @@ const TOOL_LABEL: Record<string, string> = {
   get_order_status: "Checked order",
 };
 
+const TOOL_ICON: Record<string, string> = {
+  search_products: "search",
+  plan_basket: "route",
+  set_basket: "shopping_basket",
+  update_item: "edit_square",
+  remove_item: "delete",
+  view_basket: "shopping_basket",
+  get_quote: "verified",
+  request_approval: "lock",
+  get_order_status: "receipt_long",
+};
+
+/** Vertical step list: icon per tool, label, data-derived summary, spinner on the running step. */
+export function StepList({ steps, className }: { steps: AgentTurnStep[]; className?: string }) {
+  return (
+    <ol className={cx("space-y-1.5", className)} aria-label="Assistant progress">
+      {steps.map((s, i) => {
+        const running = s.ok === null;
+        return (
+          <li key={i} className="flex items-center gap-2 type-body-medium">
+            <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", running ? "bg-secondary-container text-on-secondary-container" : s.ok ? "bg-primary-container text-on-primary-container" : "bg-error-container text-on-error-container")}>
+              {running ? <CircularProgress size={16} label={`${TOOL_LABEL[s.tool] ?? s.tool} in progress`} /> : <Icon name={s.ok ? (TOOL_ICON[s.tool] ?? "check") : "close"} size={16} label={s.ok ? undefined : "failed"} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="text-on-surface">{TOOL_LABEL[s.tool] ?? s.tool}</span>
+              {s.summary && <span className="text-on-surface-variant"> · {s.summary}</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function EventChips({ events, onOpenBasket, onReview }: { events: AgentEvent[]; onOpenBasket: () => void; onReview: () => void }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -71,6 +107,8 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [turnId, setTurnId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<AgentTurnStep[]>([]);
   const idRef = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -88,18 +126,45 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [msgs, thinking]);
+  }, [msgs, thinking, progress.length]);
+
+  // Poll the turn's tool steps once a second while the assistant works; stop when it reports done.
+  useEffect(() => {
+    if (!thinking || !turnId) return;
+    let alive = true;
+    const tick = async () => {
+      try {
+        const p = await bap.turn(turnId);
+        if (!alive) return;
+        setProgress(p.steps);
+        if (p.done) clearInterval(timer);
+      } catch {
+        // 404 before the server registers the turn, or a blip: the next tick retries.
+      }
+    };
+    const timer = setInterval(() => void tick(), 1000);
+    void tick();
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [thinking, turnId]);
 
   async function send(message: string) {
     const m = message.trim();
     if (!m || thinking) return;
     setText("");
     setMsgs((x) => [...x, { id: idRef.current++, role: "user", text: m }]);
+    const id = newTurnId();
+    setProgress([]);
+    setTurnId(id);
     setThinking(true);
     try {
-      const r = await bap.chat(m);
+      const r = await bap.chat(m, id);
       onAgentDown(null);
-      setMsgs((x) => [...x, { id: idRef.current++, role: "model", text: r.text, events: r.events, steps: r.steps }]);
+      // One last read so the disclosure keeps the per-step summaries.
+      const final = await bap.turn(id).catch(() => null);
+      setMsgs((x) => [...x, { id: idRef.current++, role: "model", text: r.text, events: r.events, steps: r.steps, liveSteps: final && final.steps.length === r.steps.length ? final.steps : undefined }]);
       onEvents(r.events);
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) onAgentDown("rate_limited");
@@ -157,23 +222,27 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
                       {m.text}
                     </p>
                     {m.events && m.events.length > 0 && <EventChips events={m.events} onOpenBasket={onOpenBasket} onReview={onReview} />}
-                    {m.steps && m.steps.length > 0 && (
+                    {(m.liveSteps?.length || m.steps?.length) ? (
                       <details className="group type-body-small text-on-surface-variant">
                         <summary className="flex cursor-pointer list-none items-center gap-1 rounded-sm py-1 [&::-webkit-details-marker]:hidden">
                           <Icon name="build" size={16} />
-                          {m.steps.length} tool call{m.steps.length === 1 ? "" : "s"}
+                          {(m.liveSteps ?? m.steps ?? []).length} tool call{(m.liveSteps ?? m.steps ?? []).length === 1 ? "" : "s"}
                           <Icon name="expand_more" size={16} className="transition-transform group-open:rotate-180" />
                         </summary>
-                        <ol className="mt-1 space-y-0.5 border-l-2 border-outline-variant pl-3">
-                          {m.steps.map((s, i) => (
-                            <li key={i} className="flex items-center gap-1">
-                              <Icon name={s.ok ? "check" : "close"} size={14} className={s.ok ? "text-primary" : "text-error"} label={s.ok ? "succeeded" : "failed"} />
-                              {TOOL_LABEL[s.tool] ?? s.tool} <span className="font-mono opacity-70">({s.tool})</span>
-                            </li>
-                          ))}
-                        </ol>
+                        {m.liveSteps ? (
+                          <StepList steps={m.liveSteps} className="mt-1 border-l-2 border-outline-variant pl-3" />
+                        ) : (
+                          <ol className="mt-1 space-y-0.5 border-l-2 border-outline-variant pl-3">
+                            {(m.steps ?? []).map((s, i) => (
+                              <li key={i} className="flex items-center gap-1">
+                                <Icon name={s.ok ? "check" : "close"} size={14} className={s.ok ? "text-primary" : "text-error"} label={s.ok ? "succeeded" : "failed"} />
+                                {TOOL_LABEL[s.tool] ?? s.tool} <span className="font-mono opacity-70">({s.tool})</span>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
                       </details>
-                    )}
+                    ) : null}
                   </div>
                 </li>
               ),
@@ -183,9 +252,12 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container" aria-hidden>
                   <Icon name="auto_awesome" size={18} filled />
                 </span>
-                <span className="flex items-center gap-3 rounded-[20px] rounded-tl-xs bg-surface-container-high px-4 py-3 type-body-medium text-on-surface-variant">
-                  <LoadingDots label="Assistant is working" /> Checking stores…
-                </span>
+                <div className="min-w-0 max-w-[85%] space-y-2 rounded-[20px] rounded-tl-xs bg-surface-container-high px-4 py-3 type-body-medium text-on-surface-variant">
+                  {progress.length > 0 && <StepList steps={progress} />}
+                  <span className="flex items-center gap-3">
+                    <LoadingDots label="Assistant is working" /> {progress.length > 0 ? "Working…" : "Thinking…"}
+                  </span>
+                </div>
               </li>
             )}
           </ol>
@@ -227,4 +299,10 @@ export function ChatPanel({ onEvents, onAgentDown, onUseManual, onOpenBasket, on
       </p>
     </div>
   );
+}
+
+/** Client-generated turn id (matches the server's [A-Za-z0-9_-]{8,64}). */
+function newTurnId(): string {
+  const u = globalThis.crypto?.randomUUID?.().replaceAll("-", "");
+  return `t${u ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`}`;
 }

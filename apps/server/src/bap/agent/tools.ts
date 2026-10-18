@@ -5,12 +5,14 @@ import {
   type BasketView,
   type LooseDeclined,
   type OrderView,
+  type PlanChoice,
   type PlanResult,
   type QuoteResponse,
   type QuoteView,
   type SearchResponse,
 } from "@kiranaai/shared";
 import type { ToolClient } from "./client.js";
+import { qtyStatedByCustomer } from "./qty.js";
 
 export const MAX_TOOL_CALLS = 8;
 
@@ -90,6 +92,10 @@ export interface ToolEnv {
   client: ToolClient;
   events: AgentEvent[];
   now?: () => number;
+  /** The customer's message this turn: quantities are judged "stated" or "inferred" against it, never by the model. */
+  userMessage?: string;
+  /** Latest plan_basket output of this turn (server-side). set_basket takes reasons and qty flags from here, not from LLM text. */
+  plan?: { choices: PlanChoice[]; reasons: string[] };
 }
 
 type Args = Record<string, unknown>;
@@ -184,11 +190,13 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
       if (r.status !== 200) return apiFail(r);
       const p = r.body as PlanResult;
       pushLoose(events, p.looseDeclined);
+      const choices = p.choices.map((c) => ({ ...c, qtyInferred: env.userMessage !== undefined && !qtyStatedByCustomer(env.userMessage, c.query, c.qty) }));
+      env.plan = { choices, reasons: p.reasons };
       return {
         ok: true,
         result: {
           note: "estimate only, not a quote; call set_basket then get_quote",
-          choices: p.choices.map((c) => ({ query: c.query, qty: c.qty, listing_id: c.offer.listingId, product: c.offer.name, store: c.offer.storeName, unitPrice: formatINR(c.offer.pricePaise), reason: c.reason })),
+          choices: choices.map((c) => ({ query: c.query, qty: c.qty, ...(c.qtyInferred ? { qty_suggested: true } : {}), listing_id: c.offer.listingId, product: c.offer.name, store: c.offer.storeName, unitPrice: formatINR(c.offer.pricePaise), reason: c.reason })),
           stores: p.stores.map((s) => ({ store: s.storeName, items: formatINR(s.itemsTotalPaise), delivery: formatINR(s.deliveryPaise) })),
           estimatedTotal: formatINR(p.estimatedTotalPaise),
           withinBudget: p.withinBudget,
@@ -204,7 +212,18 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
       for (const i of items) {
         if (typeof i.listing_id !== "string" || !isPosInt(i.qty)) return fail("bad_args", "each item needs listing_id and an integer qty >= 1");
       }
-      const r = await client.call("PUT", "/bap/basket", { items: items.map((i) => ({ listingId: i.listing_id, qty: i.qty })) });
+      // Reasons and "suggested qty" flags come from the last plan_basket result held server-side, never from model text.
+      const planned = new Map((env.plan?.choices ?? []).map((c) => [c.offer.listingId, c]));
+      const body = {
+        items: items.map((i) => {
+          const c = planned.get(i.listing_id as string);
+          if (!c) return { listingId: i.listing_id, qty: i.qty };
+          const inferred = i.qty === c.qty ? !!c.qtyInferred : env.userMessage !== undefined && !qtyStatedByCustomer(env.userMessage, c.query, i.qty as number);
+          return { listingId: i.listing_id, qty: i.qty, reason: c.reason, qtyInferred: inferred };
+        }),
+        ...(env.plan?.reasons.length && planned.size ? { planReasons: env.plan.reasons } : {}),
+      };
+      const r = await client.call("PUT", "/bap/basket", body);
       if (r.status !== 200) return apiFail(r);
       pushOnce(events, { type: "basket_updated" });
       return { ok: true, result: basketForModel(r.body as BasketView) };
@@ -273,5 +292,42 @@ export async function runTool(name: string, args: Args, env: ToolEnv): Promise<T
     }
     default:
       return fail("unknown_tool", name);
+  }
+}
+
+/** Short, data-derived text for the live progress list (UX-01). Built from the tool result, never from model text. */
+export function summarizeStep(name: string, run: ToolRun): string {
+  const res = (run.result ?? {}) as Record<string, unknown>;
+  if (!run.ok) return typeof res.error === "string" ? res.error.replaceAll("_", " ") : "failed";
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  switch (name) {
+    case "search_products": {
+      const groups = (res.groups ?? []) as { offers?: { store?: string }[] }[];
+      const offers = groups.flatMap((g) => g.offers ?? []);
+      const stores = new Set(offers.map((o) => o.store));
+      return offers.length ? `${plural(stores.size, "store")} · ${plural(offers.length, "offer")}` : "no matches";
+    }
+    case "plan_basket": {
+      const stores = ((res.stores ?? []) as unknown[]).length;
+      return `${plural(stores, "store")} · est ${String(res.estimatedTotal ?? "")}`.trim();
+    }
+    case "set_basket":
+    case "update_item":
+    case "remove_item":
+    case "view_basket": {
+      const stores = (res.stores ?? []) as { items?: unknown[] }[];
+      const items = stores.reduce((n, s) => n + (s.items?.length ?? 0), 0);
+      return `${plural(items, "item")} · ${plural(stores.length, "store")}`;
+    }
+    case "get_quote":
+      return `${String(res.grandTotal ?? "")} verified`.trim();
+    case "request_approval":
+      return "Approval card shown";
+    case "get_order_status": {
+      const n = ((res.orders ?? []) as unknown[]).length;
+      return n ? plural(n, "order") : "no orders yet";
+    }
+    default:
+      return "done";
   }
 }

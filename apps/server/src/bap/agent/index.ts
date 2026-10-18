@@ -4,9 +4,11 @@ import type { AgentEvent, AgentHistoryMessage, AgentReply } from "@kiranaai/shar
 import { audit } from "../../beckn/audit.js";
 import { requireAuth } from "../../lib/auth.js";
 import { makeToolClient, ToolForbiddenError, type ToolClient } from "./client.js";
+import { createFakeLlm } from "./fake-llm.js";
 import { createGeminiLlm, type Content, type Llm } from "./llm.js";
 import { SYSTEM_PROMPT } from "./prompt.js";
-import { MAX_TOOL_CALLS, runTool, TOOL_DECLARATIONS } from "./tools.js";
+import { TURN_ID_RE, TurnProgressStore } from "./progress.js";
+import { MAX_TOOL_CALLS, runTool, summarizeStep, TOOL_DECLARATIONS, type ToolEnv } from "./tools.js";
 
 /** Test seams: inject a fake model / fake loopback fetch / tighter limits. Unset in production. */
 export const agentTestHooks: { llm?: Llm; fetchImpl?: typeof fetch; timeoutMs?: number; maxPerWindow?: number } = {};
@@ -40,7 +42,8 @@ export async function runTurn(opts: {
   message: string;
   client: ToolClient;
   signal: AbortSignal;
-  onTool?: (t: { tool: string; args: unknown; ok: boolean }) => void | Promise<void>;
+  onToolStart?: (t: { tool: string }) => number | void;
+  onTool?: (t: { tool: string; args: unknown; ok: boolean; summary: string; stepIndex: number | void }) => void | Promise<void>;
 }): Promise<{ reply: AgentReply; created: Content[] }> {
   const { llm, client, signal } = opts;
   const events: AgentEvent[] = [];
@@ -48,6 +51,7 @@ export async function runTurn(opts: {
   const created: Content[] = [{ role: "user", parts: [{ text: opts.message }] }];
   let calls = 0;
   let text = "";
+  const env: ToolEnv = { client, events, userMessage: opts.message };
 
   for (let round = 0; round < MAX_TOOL_CALLS + 2; round++) {
     if (signal.aborted) throw new AgentTimeoutError();
@@ -68,15 +72,16 @@ export async function runTurn(opts: {
         run = { ok: false, result: { error: "tool_budget_exhausted", message: "No more tool calls this turn. Answer the customer with what you have." } };
       } else {
         calls++;
+        const stepIndex = opts.onToolStart?.({ tool: name });
         try {
-          run = await runTool(name, args, { client, events });
+          run = await runTool(name, args, env);
         } catch (err) {
           if (err instanceof ToolForbiddenError) run = { ok: false, result: { error: "tool_forbidden" } };
           else if (signal.aborted) throw new AgentTimeoutError();
           else run = { ok: false, result: { error: "tool_failed", message: err instanceof Error ? err.message : "unknown" } };
         }
         steps.push({ tool: name, ok: run.ok });
-        await opts.onTool?.({ tool: name, args, ok: run.ok });
+        await opts.onTool?.({ tool: name, args, ok: run.ok, summary: summarizeStep(name, run), stepIndex });
       }
       responses.push({ functionResponse: { ...(fc.id ? { id: fc.id } : {}), name, response: run.ok ? { output: run.result } : { error: run.result } } });
     }
@@ -94,16 +99,18 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   let day = new Date().toISOString().slice(0, 10);
   let dayCount = 0;
   let llm: Llm | null = null;
+  const progress = new TurnProgressStore();
 
   const getLlm = (): Llm | null => {
     if (agentTestHooks.llm) return agentTestHooks.llm;
+    if (config.AGENT_FAKE === "1") return (llm ??= createFakeLlm());
     if (!config.GEMINI_API_KEY) return null;
     llm ??= createGeminiLlm({ apiKey: config.GEMINI_API_KEY, model: config.GEMINI_MODEL, systemInstruction: SYSTEM_PROMPT, declarations: TOOL_DECLARATIONS });
     return llm;
   };
 
   app.post("/chat", { preHandler: requireAuth("customer") }, async (req, reply) => {
-    const body = z.object({ message: z.string().trim().min(1).max(2000) }).safeParse(req.body);
+    const body = z.object({ message: z.string().trim().min(1).max(2000), turnId: z.string().regex(TURN_ID_RE).optional() }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     const customerId = req.auth!.sub;
 
@@ -126,6 +133,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     if (inFlight.has(customerId)) return reply.code(409).send({ error: "agent_busy" });
     inFlight.add(customerId);
 
+    const turnId = body.data.turnId;
+    if (turnId) progress.start(customerId, turnId);
     const ac = new AbortController();
     const timeoutMs = agentTestHooks.timeoutMs ?? TURN_TIMEOUT_MS;
     let timer: NodeJS.Timeout | undefined;
@@ -153,7 +162,11 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         message: body.data.message,
         client,
         signal: ac.signal,
-        onTool: (t) => audit(pool, { kind: "state", action: "agent.tool", actor: "bap", entityId: customerId, payload: t }),
+        onToolStart: turnId ? (t) => progress.beginStep(customerId, turnId, t.tool) : undefined,
+        onTool: async (t) => {
+          if (turnId && typeof t.stepIndex === "number") progress.finishStep(customerId, turnId, t.stepIndex, { ok: t.ok, summary: t.summary });
+          await audit(pool, { kind: "state", action: "agent.tool", actor: "bap", entityId: customerId, payload: { tool: t.tool, args: t.args, ok: t.ok } });
+        },
       });
       turn.catch(() => undefined); // if the deadline wins, don't leave an unhandled rejection
       const { reply: out, created } = await Promise.race([turn, deadline]);
@@ -169,7 +182,16 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     } finally {
       clearTimeout(timer);
       inFlight.delete(customerId);
+      if (turnId) progress.finish(customerId, turnId);
     }
+  });
+
+  /** Live steps of a running (or just finished) turn, scoped to the caller. Polled once a second by the chat panel. */
+  app.get("/turns/:turnId", { preHandler: requireAuth("customer") }, async (req, reply) => {
+    const { turnId } = req.params as { turnId: string };
+    const p = TURN_ID_RE.test(turnId) ? progress.get(req.auth!.sub, turnId) : null;
+    if (!p) return reply.code(404).send({ error: "turn_not_found" });
+    return p;
   });
 
   /** Chat transcript (text parts only) so the UI can restore the conversation after a reload. */

@@ -1,7 +1,9 @@
 import type {
   AgentHistoryMessage,
   AgentReply,
+  AgentTurnProgress,
   ApproveResponse,
+  BasketPutItem,
   BasketView,
   OrderView,
   PayResponse,
@@ -20,7 +22,10 @@ export const bap = {
   setQty: (listingId: string, qty: number) =>
     api<BasketView>(`/bap/basket/items/${encodeURIComponent(listingId)}`, { method: "PATCH", json: { qty } }),
   remove: (listingId: string) => api<BasketView>(`/bap/basket/items/${encodeURIComponent(listingId)}`, { method: "DELETE" }),
-  replace: (items: { listingId: string; qty: number }[]) => api<BasketView>("/bap/basket", { method: "PUT", json: { items } }),
+  replace: (items: BasketPutItem[], planReasons?: string[]) =>
+    api<BasketView>("/bap/basket", { method: "PUT", json: { items, ...(planReasons?.length ? { planReasons } : {}) } }),
+  /** "Looks right": clears every suggested-quantity flag. */
+  confirmQty: () => api<BasketView>("/bap/basket/confirm-qty", { method: "POST", json: {} }),
   plan: (needs: PlanNeed[], budgetPaise?: number) =>
     api<PlanResult>("/bap/plan", { method: "POST", json: { needs, ...(budgetPaise ? { budgetPaise } : {}) } }),
   quote: () => api<QuoteResponse>("/bap/basket/quote", { method: "POST", json: {} }),
@@ -34,7 +39,10 @@ export const bap = {
     }),
   order: (basketId: string) => api<OrderView>(`/bap/baskets/${encodeURIComponent(basketId)}`),
   orders: () => api<OrderView[]>("/bap/orders"),
-  chat: (message: string) => api<AgentReply>("/bap/agent/chat", { method: "POST", json: { message }, signal: AbortSignal.timeout(30_000) }),
+  chat: (message: string, turnId?: string) =>
+    api<AgentReply>("/bap/agent/chat", { method: "POST", json: { message, ...(turnId ? { turnId } : {}) }, signal: AbortSignal.timeout(30_000) }),
+  /** Live tool steps of a running agent turn (404 until the server has registered it). */
+  turn: (turnId: string) => api<AgentTurnProgress>(`/bap/agent/turns/${encodeURIComponent(turnId)}`),
   chatHistory: () => api<{ messages: AgentHistoryMessage[] }>("/bap/agent/history"),
   chatReset: () => api<{ ok: boolean }>("/bap/agent/reset", { method: "POST", json: {} }),
 };

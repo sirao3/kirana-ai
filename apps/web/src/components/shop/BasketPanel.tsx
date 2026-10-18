@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BasketView, QuoteLineView, StoreQuoteError } from "@kiranaai/shared";
 import { formatINR } from "../../lib/format";
@@ -23,12 +23,17 @@ function SummaryRow({ label, value, strong }: { label: string; value: string; st
  * Basket grouped by store with quantity steppers. Once quoted, the same view shows verified prices,
  * per-store delivery, platform fee and the grand total with its validity countdown.
  */
-export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteErrors }: {
+export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteErrors, confirmQty = false, confirmingQty = false, onConfirmQty, onEditQty }: {
   basket: BasketView;
   onCheckout: () => void;
   checkingOut: boolean;
   error: string | null;
   quoteErrors: StoreQuoteError[];
+  /** Show the "Looks right / Edit" row because some quantities are still suggestions (UX-03). */
+  confirmQty?: boolean;
+  confirmingQty?: boolean;
+  onConfirmQty?: () => void;
+  onEditQty?: () => void;
 }) {
   const qc = useQueryClient();
   const [expiredNow, setExpiredNow] = useState<string | null>(null);
@@ -42,6 +47,12 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
   const quoteStore = (storeId: string) => q?.stores.find((s) => s.storeId === storeId);
   const quoteLine = (storeId: string, listingId: string): QuoteLineView | undefined => quoteStore(storeId)?.lines.find((l) => l.listingId === listingId);
   const subtotal = basket.stores.reduce((s, g) => s + g.itemsTotalPaise, 0);
+  const suggested = basket.stores.reduce((n, g) => n + g.items.filter((i) => i.qtyInferred).length, 0);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const showConfirm = confirmQty && suggested > 0;
+  useEffect(() => {
+    if (showConfirm) confirmRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [showConfirm]);
 
   return (
     <section aria-labelledby="basket-title" className="flex flex-col">
@@ -95,6 +106,15 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
                         <div className="min-w-0 basis-full">
                           <p className={ql && !ql.available ? "type-body-large text-error line-through" : "type-body-large text-on-surface"}>{i.name}</p>
                           <p className="type-body-small text-on-surface-variant">{formatINR(ql?.unitPricePaise ?? i.seenPricePaise)} each</p>
+                          {i.reason && (
+                            <p className="mt-0.5 flex items-start gap-1 type-body-small text-on-surface-variant">
+                              <Icon name="lightbulb" size={16} className="mt-px shrink-0" />
+                              <span>{i.reason}</span>
+                            </p>
+                          )}
+                          {i.qtyInferred && (
+                            <StatusLabel tone="info" icon="auto_awesome" className="mt-1">Suggested qty</StatusLabel>
+                          )}
                           {ql?.priceChanged && (
                             <StatusLabel tone="warning" icon="trending_flat" className="mt-1">
                               Price changed {formatINR(ql.seenPricePaise)} → {formatINR(ql.unitPricePaise)}
@@ -112,6 +132,17 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
               </div>
             );
           })}
+
+          {basket.planReasons && basket.planReasons.length > 0 && (
+            <ul className="space-y-1 px-1" aria-label="Why these stores">
+              {basket.planReasons.map((r) => (
+                <li key={r} className="flex items-start gap-2 type-body-small text-on-surface-variant">
+                  <Icon name="lightbulb" size={16} className="mt-px shrink-0 text-tertiary" />
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div className="space-y-1 px-1">
             {q ? (
@@ -135,6 +166,24 @@ export function BasketPanel({ basket, onCheckout, checkingOut, error, quoteError
           </div>
 
           {(edit.error || error) && <InlineMessage tone="error">{error ?? errorMessage(edit.error)}</InlineMessage>}
+
+          {showConfirm && (
+            <div ref={confirmRef}>
+            <InlineMessage
+              tone="info"
+              icon="auto_awesome"
+              title={`We guessed ${suggested} quantit${suggested === 1 ? "y" : "ies"}`}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="text" onClick={onEditQty} disabled={confirmingQty}>Edit</Button>
+                  <Button size="sm" variant="tonal" icon="check" loading={confirmingQty} onClick={onConfirmQty}>Looks right</Button>
+                </div>
+              }
+            >
+              Check them above. Change a number or confirm to continue.
+            </InlineMessage>
+            </div>
+          )}
 
           <Button className="w-full" icon={live ? "lock" : "verified"} loading={checkingOut} disabled={edit.isPending} onClick={onCheckout}>
             {checkingOut ? "Checking with stores…" : live ? `Review and pay ${formatINR(q!.grandTotalPaise)}` : "Get verified quote"}

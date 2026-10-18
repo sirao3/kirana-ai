@@ -15,6 +15,8 @@ const Env = z.object({
   AUTH_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.5-flash"),
+  /** Dev only: "1" replaces Gemini with a scripted model (no network). Off by default; never set in production. */
+  AGENT_FAKE: z.enum(["0", "1"]).default("0"),
   AGENT_DAILY_CAP: z.coerce.number().int().positive().default(500),
   OFFER_WINDOW_SECONDS: z.coerce.number().int().positive().default(45),
   WEB_DIST: z.string().optional(),

@@ -28,6 +28,8 @@ export interface BasketItemRow {
   name: string;
   qty: number;
   seen_price_paise: number;
+  reason: string | null;
+  qty_inferred: boolean;
 }
 
 /** The customer's open basket, created as DRAFT if none. */
@@ -58,7 +60,7 @@ export async function getOpenBasket(pool: pg.Pool, customerId: string): Promise<
 
 export async function loadBasketItems(db: pg.Pool | pg.PoolClient, basketId: string): Promise<BasketItemRow[]> {
   const { rows } = await db.query<BasketItemRow>(
-    `SELECT listing_id, store_id, store_name, bpp_id, bpp_uri, canonical_product_id, name, qty, seen_price_paise
+    `SELECT listing_id, store_id, store_name, bpp_id, bpp_uri, canonical_product_id, name, qty, seen_price_paise, reason, qty_inferred
      FROM bap.basket_item WHERE basket_id = $1 ORDER BY added_at, id`,
     [basketId],
   );
@@ -77,7 +79,10 @@ export async function refreshExpiry(pool: pg.Pool | pg.PoolClient, basketId: str
 
 export async function basketView(pool: pg.Pool, basketId: string): Promise<BasketView> {
   await refreshExpiry(pool, basketId);
-  const { rows } = await pool.query<BasketRow>("SELECT id, customer_id, status, transaction_id, updated_at FROM bap.basket WHERE id = $1", [basketId]);
+  const { rows } = await pool.query<BasketRow & { plan_reasons: string[] | null }>(
+    "SELECT id, customer_id, status, transaction_id, updated_at, plan_reasons FROM bap.basket WHERE id = $1",
+    [basketId],
+  );
   const b = rows[0];
   if (!b) throw new ApiError(404, "basket_not_found");
   const items = await loadBasketItems(pool, basketId);
@@ -97,6 +102,8 @@ export async function basketView(pool: pg.Pool, basketId: string): Promise<Baske
       qty: it.qty,
       seenPricePaise: it.seen_price_paise,
       lineTotalPaise: it.seen_price_paise * it.qty,
+      reason: it.reason,
+      qtyInferred: it.qty_inferred,
     };
     g.items.push(view);
     g.itemsTotalPaise += view.lineTotalPaise;
@@ -110,10 +117,14 @@ export async function basketView(pool: pg.Pool, basketId: string): Promise<Baske
     stores: [...groups.values()],
     itemCount: items.length,
     quote,
+    planReasons: b.plan_reasons ?? [],
   };
 }
 
-export type ItemEdit = { listingId: string; qty: number };
+export type ItemEdit = { listingId: string; qty: number; reason?: string | null; qtyInferred?: boolean };
+type LineState = { qty: number; reason: string | null; qtyInferred: boolean };
+/** `planReasons`: undefined keeps the stored value, an array (possibly empty) replaces it. */
+type Computed = { items: Map<string, LineState>; planReasons?: string[] };
 
 /**
  * Applies a basket edit in one short transaction. `edit` receives the locked basket and returns the final
@@ -122,7 +133,7 @@ export type ItemEdit = { listingId: string; qty: number };
 async function editBasket(
   pool: pg.Pool,
   customerId: string,
-  compute: (current: Map<string, number>) => Map<string, number>,
+  compute: (current: Map<string, LineState>) => Computed,
 ): Promise<BasketView> {
   const basket = await getOpenBasket(pool, customerId);
   const id = await withTx(pool, async (c) => {
@@ -134,31 +145,35 @@ async function editBasket(
     if (b.status === "PAYMENT_INITIATED") throw new ApiError(409, "payment_in_progress", "The basket is being paid; it cannot be edited now.");
     if (!OPEN_STATUSES.includes(b.status)) throw new ApiError(409, "basket_closed", "This basket is already an order.");
 
-    const current = new Map((await loadBasketItems(c, b.id)).map((i) => [i.listing_id, i.qty]));
-    const next = compute(current);
+    const current = new Map<string, LineState>(
+      (await loadBasketItems(c, b.id)).map((i) => [i.listing_id, { qty: i.qty, reason: i.reason, qtyInferred: i.qty_inferred }]),
+    );
+    const { items: next, planReasons } = compute(current);
     const seen = await getSeenOffers(c, customerId, [...next.keys()]);
     const unknown = [...next.keys()].filter((l) => !seen.has(l));
     if (unknown.length) {
       throw new ApiError(404, "unknown_listing", "Search for these items first; the basket can only hold listings you have seen in a search.", { listingIds: unknown });
     }
     await c.query("DELETE FROM bap.basket_item WHERE basket_id = $1 AND NOT (listing_id = ANY($2))", [b.id, [...next.keys()]]);
-    for (const [listingId, qty] of next) {
+    for (const [listingId, line] of next) {
       const o = seen.get(listingId)!;
+      const { qty } = line;
       if (current.has(listingId)) {
         await c.query(
-          "UPDATE bap.basket_item SET qty = $3, seen_price_paise = $4 WHERE basket_id = $1 AND listing_id = $2",
-          [b.id, listingId, qty, o.pricePaise],
+          "UPDATE bap.basket_item SET qty = $3, seen_price_paise = $4, reason = $5, qty_inferred = $6 WHERE basket_id = $1 AND listing_id = $2",
+          [b.id, listingId, qty, o.pricePaise, line.reason, line.qtyInferred],
         );
       } else {
         await c.query(
-          `INSERT INTO bap.basket_item (basket_id, listing_id, store_id, store_name, bpp_id, bpp_uri, canonical_product_id, name, qty, seen_price_paise)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [b.id, listingId, o.storeId, o.storeName, o.bppId, o.bppUri, o.canonicalProductId, o.name, qty, o.pricePaise],
+          `INSERT INTO bap.basket_item (basket_id, listing_id, store_id, store_name, bpp_id, bpp_uri, canonical_product_id, name, qty, seen_price_paise, reason, qty_inferred)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [b.id, listingId, o.storeId, o.storeName, o.bppId, o.bppUri, o.canonicalProductId, o.name, qty, o.pricePaise, line.reason, line.qtyInferred],
         );
       }
     }
     const status: BasketStatus = EDIT_TO_DRAFT.includes(b.status) ? "DRAFT" : b.status;
     await c.query("UPDATE bap.basket SET status = $2, updated_at = clock_timestamp() WHERE id = $1", [b.id, status]);
+    if (planReasons !== undefined) await c.query("UPDATE bap.basket SET plan_reasons = $2 WHERE id = $1", [b.id, JSON.stringify(planReasons)]);
     if (status !== b.status) {
       await auditState(c, "bap", `basket.${status}`, { entityId: b.id, transactionId: b.transaction_id, payload: { from: b.status, reason: "edited" } });
     }
@@ -167,16 +182,26 @@ async function editBasket(
   return basketView(pool, id);
 }
 
-export const replaceBasket = (pool: pg.Pool, customerId: string, items: ItemEdit[]) =>
-  editBasket(pool, customerId, () => new Map(items.map((i) => [i.listingId, i.qty])));
+/** Replace all lines. Reasons / qtyInferred come from the caller (a plan); omitted means none. Plan reasons are replaced too. */
+export const replaceBasket = (pool: pg.Pool, customerId: string, items: ItemEdit[], planReasons: string[] = []) =>
+  editBasket(pool, customerId, () => ({
+    items: new Map(items.map((i) => [i.listingId, { qty: i.qty, reason: i.reason ?? null, qtyInferred: i.qtyInferred ?? false }])),
+    planReasons,
+  }));
+
+/** A changed quantity keeps the reason and clears the "suggested" flag; a new line has no reason unless given. */
+const withQty = (cur: LineState | undefined, item: ItemEdit): LineState =>
+  cur
+    ? { qty: item.qty, reason: item.reason !== undefined ? item.reason : cur.reason, qtyInferred: item.qtyInferred ?? (item.qty !== cur.qty ? false : cur.qtyInferred) }
+    : { qty: item.qty, reason: item.reason ?? null, qtyInferred: item.qtyInferred ?? false };
 
 export const setBasketItem = (pool: pg.Pool, customerId: string, item: ItemEdit) =>
-  editBasket(pool, customerId, (cur) => new Map(cur).set(item.listingId, item.qty));
+  editBasket(pool, customerId, (cur) => ({ items: new Map(cur).set(item.listingId, withQty(cur.get(item.listingId), item)) }));
 
 export function patchBasketItem(pool: pg.Pool, customerId: string, item: ItemEdit): Promise<BasketView> {
   return editBasket(pool, customerId, (cur) => {
     if (!cur.has(item.listingId)) throw new ApiError(404, "item_not_in_basket");
-    return new Map(cur).set(item.listingId, item.qty);
+    return { items: new Map(cur).set(item.listingId, withQty(cur.get(item.listingId), { listingId: item.listingId, qty: item.qty })) };
   });
 }
 
@@ -185,6 +210,13 @@ export function removeBasketItem(pool: pg.Pool, customerId: string, listingId: s
     if (!cur.has(listingId)) throw new ApiError(404, "item_not_in_basket");
     const next = new Map(cur);
     next.delete(listingId);
-    return next;
+    return { items: next };
   });
+}
+
+/** "Looks right": the customer confirmed the suggested quantities. No status change, the quote stays valid. */
+export async function confirmSuggestedQty(pool: pg.Pool, customerId: string): Promise<BasketView> {
+  const basket = await getOpenBasket(pool, customerId);
+  await pool.query("UPDATE bap.basket_item SET qty_inferred = false WHERE basket_id = $1 AND qty_inferred", [basket.id]);
+  return basketView(pool, basket.id);
 }
