@@ -1,130 +1,34 @@
 import { useEffect, useRef, useState } from "react";
-import type { OrderView, PaymentStatus, SubOrderStatus, SubOrderView } from "@kiranaai/shared";
-import { formatINR, itemsLabel } from "../../lib/format";
-import { useMedia } from "../../lib/useMedia";
-import { Button, Card, Countdown, cx, Icon, InlineMessage, LinearProgress, StatusLabel, type Tone } from "../m3";
+import { AnimatePresence, motion } from "motion/react";
+import type { OrderView, PaymentStatus, SubOrderView } from "@kiranaai/shared";
+import { formatINR } from "../../lib/format";
+import { C, CheckDraw, IChevron, Money, Ring, Spinner, cardShadow, ease, shortName, soft, type Tone } from "../ui";
 import { HandoffStrip } from "./HandoffStrip";
-import { priceProtection, priceProtectionMessage } from "./handoff";
+import { priceProtection } from "./handoff";
 import { ReceiptCard } from "./ReceiptCard";
-import { deriveTimeline, type StepState } from "./timeline";
+import { deriveTimeline } from "./timeline";
 import { useAttemptAnnouncements } from "./useAttemptAnnouncements";
+import { LINK } from "./tokens";
 
-/** M3 medium window class and up (>=600 px): the full timeline is shown by default. */
-const MEDIUM = "(min-width: 600px)";
+const PAYMENT: Record<PaymentStatus, string> = { NONE: "Not paid", INITIATED: "Payment pending", PAID: "Paid", FAILED: "Payment failed" };
 
-export const PAYMENT: Record<PaymentStatus, { tone: Tone; icon: string; label: string }> = {
-  NONE: { tone: "neutral", icon: "hourglass_empty", label: "Not paid" },
-  INITIATED: { tone: "info", icon: "sync", label: "Payment pending" },
-  PAID: { tone: "success", icon: "check_circle", label: "Paid" },
-  FAILED: { tone: "error", icon: "error", label: "Payment failed" },
-};
-
-const SUB: Record<SubOrderStatus, { tone: Tone; icon: string; label: string; progress?: number }> = {
-  DISPATCHING: { tone: "info", icon: "travel_explore", label: "Finding store", progress: 0.1 },
-  ACCEPTED: { tone: "primary", icon: "thumb_up", label: "Accepted", progress: 0.3 },
-  PREPARING: { tone: "primary", icon: "inventory_2", label: "Preparing", progress: 0.5 },
-  READY: { tone: "primary", icon: "shopping_bag", label: "Ready", progress: 0.65 },
-  OUT_FOR_DELIVERY: { tone: "primary", icon: "two_wheeler", label: "Out for delivery", progress: 0.85 },
-  DELIVERED: { tone: "success", icon: "check_circle", label: "Delivered", progress: 1 },
-  FAILED_NO_FULFILMENT: { tone: "error", icon: "cancel", label: "No store available" },
-};
-
-/** One-line overall status for an order (used by the orders list). */
-export function orderSummary(o: OrderView): { tone: Tone; icon: string; label: string } {
-  if (o.paymentStatus !== "PAID") return PAYMENT[o.paymentStatus];
-  if (o.settled) return { tone: "success", icon: "verified", label: "Settled" };
+/** One-line overall status for an order (orders list, tracker header). */
+export function orderSummary(o: OrderView): { tone: Tone; label: string } {
+  if (o.paymentStatus !== "PAID") return { tone: o.paymentStatus === "FAILED" ? "bad" : "neutral", label: PAYMENT[o.paymentStatus] };
+  if (o.settled) return { tone: "good", label: "Delivered and settled" };
   const subs = o.subOrders;
-  if (subs.length && subs.every((s) => s.status === "DELIVERED")) return { tone: "success", icon: "check_circle", label: "Delivered" };
-  if (subs.some((s) => s.status === "DISPATCHING")) return { tone: "info", icon: "travel_explore", label: "Finding stores" };
-  if (subs.some((s) => s.status === "FAILED_NO_FULFILMENT")) return { tone: "warning", icon: "currency_exchange", label: "Partly refunded" };
-  return { tone: "primary", icon: "local_shipping", label: "On the way" };
+  if (subs.length && subs.every((s) => s.status === "DELIVERED")) return { tone: "good", label: "Delivered" };
+  if (subs.some((s) => s.status === "DISPATCHING")) return { tone: "info", label: "Finding stores" };
+  if (subs.some((s) => s.status === "FAILED_NO_FULFILMENT")) return { tone: "warn", label: "Partly refunded" };
+  return { tone: "info", label: "On the way" };
 }
 
-const DOT: Record<StepState, string> = {
-  done: "bg-primary text-on-primary",
-  active: "bg-tertiary-container text-on-tertiary-container",
-  pending: "border-2 border-outline-variant",
-  failed: "bg-error-container text-on-error-container",
-};
-const DOT_ICON: Partial<Record<StepState, string>> = { done: "check", failed: "close" };
-const STATE_TEXT: Record<StepState, string> = { done: "done", active: "in progress", pending: "not started", failed: "failed" };
+export const isInFlight = (o: OrderView) => o.paymentStatus === "PAID" && !o.settled;
 
-function SubOrderCard({ sub }: { sub: SubOrderView }) {
-  const steps = deriveTimeline(sub);
-  const store = sub.currentStoreName ?? sub.approvedStoreName;
-  const st = SUB[sub.status];
-  const protect = priceProtection(sub);
-  const roomy = useMedia(MEDIUM);
-  const [open, setOpen] = useState(false);
-  const showSteps = roomy || open;
-  const current = steps.find((x) => x.state === "active") ?? [...steps].reverse().find((x) => x.state !== "pending") ?? steps[0]!;
-  return (
-    <Card variant="outlined" className="overflow-hidden">
-      <header className="flex flex-wrap items-center gap-3 px-4 pb-2 pt-4">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container">
-          <Icon name="storefront" />
-        </span>
-        <div className="min-w-[7rem] flex-1">
-          <h3 className="break-words type-title-medium text-on-surface">{store}</h3>
-          <p className="type-body-medium text-on-surface-variant">{formatINR(sub.approvedAmountPaise)} · {itemsLabel(sub.lines.reduce((n, l) => n + l.qty, 0))}</p>
-        </div>
-        <StatusLabel tone={st.tone} icon={st.icon}>{st.label}</StatusLabel>
-      </header>
-      <HandoffStrip sub={sub} />
-      {protect && (
-        <div className="px-4 pb-3">
-          <InlineMessage tone="success" icon="shield" live={false}>{priceProtectionMessage(protect)}</InlineMessage>
-        </div>
-      )}
-      {st.progress !== undefined && <LinearProgress value={st.progress} label={`${store}: ${st.label}`} className="mx-4 w-auto!" />}
+const STAGES = ["ACCEPTED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED"] as const;
+const STAGE_LABEL: Record<string, string> = { ACCEPTED: "Accepted", PREPARING: "Packing", READY: "Ready", OUT_FOR_DELIVERY: "On the way", DELIVERED: "Delivered" };
 
-      <div className="grid gap-x-8 gap-y-4 p-4 sm:grid-cols-[1fr_1.3fr]">
-        <ul className="space-y-1 type-body-medium text-on-surface-variant" aria-label="Items">
-          {sub.lines.map((l) => (
-            <li key={l.listingId} className="flex justify-between gap-3">
-              <span>{l.qty} × {l.name}</span>
-              <span className="tabular-nums">{formatINR(l.lineTotalPaise)}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div>
-        {!roomy && (
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <p className="min-w-[8rem] flex-1 type-body-medium text-on-surface">{!open && <>Now: {current.label}</>}</p>
-            <Button variant="text" icon={open ? "expand_less" : "expand_more"} aria-expanded={open} aria-controls={`steps-${sub.id}`} onClick={() => setOpen((v) => !v)}>
-              {open ? "Hide steps" : "Show all steps"}
-            </Button>
-          </div>
-        )}
-        <ol id={`steps-${sub.id}`} aria-label="Progress" hidden={!showSteps}>
-          {steps.map((s, i) => (
-            <li key={s.key} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", DOT[s.state])}>
-                  {DOT_ICON[s.state] ? <Icon name={DOT_ICON[s.state]!} size={16} /> : s.state === "active" && <span className="h-2 w-2 animate-breathe rounded-full bg-tertiary" />}
-                </span>
-                {i < steps.length - 1 && <span className={cx("min-h-4 w-0.5 flex-1", s.state === "done" ? "bg-primary" : "bg-outline-variant")} />}
-              </div>
-              <div className={cx("pb-3 type-body-medium", s.state === "pending" ? "text-on-surface-variant" : s.state === "failed" ? "text-error" : "text-on-surface", s.state === "active" && "type-title-small")}>
-                {s.label}
-                <span className="sr-only"> ({STATE_TEXT[s.state]})</span>
-                {s.state === "active" && s.expiresAt && (
-                  <StatusLabel tone="info" icon="timer" className="ml-2">
-                    <Countdown until={s.expiresAt} /> to accept
-                  </StatusLabel>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/** Polite text for payment / overall status changes after first load (store handoffs are handled by useAttemptAnnouncements). */
+/** Polite text for payment / overall status changes after first load (store handoffs come from useAttemptAnnouncements). */
 function useStatusAnnouncement(o: OrderView): string {
   const prev = useRef<{ pay: PaymentStatus; label: string } | undefined>(undefined);
   const [said, setSaid] = useState("");
@@ -132,66 +36,158 @@ function useStatusAnnouncement(o: OrderView): string {
   useEffect(() => {
     const before = prev.current;
     prev.current = { pay: o.paymentStatus, label };
-    if (!before || o.settled) return; // first load is silent; "Order settled" has its own status region
-    if (before.pay !== o.paymentStatus) setSaid(`Payment status: ${PAYMENT[o.paymentStatus].label}.`);
+    if (!before) return;
+    if (before.pay !== o.paymentStatus) setSaid(`Payment status: ${PAYMENT[o.paymentStatus]}.`);
     else if (before.label !== label) setSaid(`Order status: ${label}.`);
-  }, [o.paymentStatus, o.settled, label]);
+  }, [o.paymentStatus, label]);
   return said;
 }
 
-/** Customer order detail: payment status (separate from fulfilment) + one live timeline per store. */
-export function OrderDetail({ order: o }: { order: OrderView }) {
-  const pay = PAYMENT[o.paymentStatus];
+/**
+ * The order as one card: total, then each store with a five-step progress line. A reassignment slides the store name
+ * and explains itself ("Lakshmi declined (out of stock) · moved to Annapurna · your price stays ₹550 · KiranaAI covers ₹40").
+ * `full` adds items, every step, the handoff sequence, order facts and (once settled) the receipt.
+ */
+export function OrderDetail({ order: o, now, full = false, onOpen }: { order: OrderView; now: number; full?: boolean; onOpen?: () => void }) {
   const said = useAttemptAnnouncements(o);
   const statusSaid = useStatusAnnouncement(o);
+  const sum = orderSummary(o);
   return (
     <div className="space-y-4">
       <div role="status" aria-live="polite" className="sr-only">{said}</div>
       <div role="status" aria-live="polite" className="sr-only">{statusSaid}</div>
-      {o.settled && (
-        // Expressive moment: the end of the journey.
-        <section role="status" className="flex items-center gap-4 rounded-xl bg-primary-container p-5 text-on-primary-container">
-          <span className="flex h-14 w-14 shrink-0 animate-pop items-center justify-center rounded-lg bg-primary text-on-primary">
-            <Icon name="verified" size={32} filled />
-          </span>
-          <div>
-            <p className="type-headline-small type-emphasized">Order settled</p>
-            <p className="type-body-medium">All stores are done and payouts are complete.</p>
+      <motion.section layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={soft} aria-label="Order status"
+        className="bg-white" style={{ borderRadius: 22, padding: 18, boxShadow: cardShadow }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium" style={{ color: sum.tone === "bad" ? C.red : C.secondary }}>
+              {o.paymentStatus === "PAID" ? (o.settled ? "Delivered and settled" : `${sum.label} · paid by UPI`) : sum.label}
+            </p>
+            <Money value={o.grandTotalPaise} className="mt-1 block text-[34px] font-bold leading-none tracking-[-0.03em]" style={{ color: C.label }} />
           </div>
-        </section>
-      )}
-
-      {o.settled && <ReceiptCard order={o} />}
-
-      <Card variant="filled" className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="type-label-large text-on-surface-variant">Order total</p>
-            <p className="type-headline-large tabular-nums text-on-surface">{formatINR(o.grandTotalPaise)}</p>
-          </div>
-          <StatusLabel tone={pay.tone} icon={pay.icon}>{pay.label}</StatusLabel>
+          {o.paymentStatus === "PAID" && <CheckDraw size={30} />}
         </div>
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 type-body-small text-on-surface-variant">
+        {o.subOrders.length === 0 ? (
+          <p className="mt-3 text-[14px]" style={{ color: C.secondary }}>{o.paymentStatus === "FAILED" ? "Payment failed. You were not charged." : "No stores yet. Waiting for payment."}</p>
+        ) : (
+          <div className="mt-4">
+            {o.subOrders.map((s, i) => <SubRow key={s.id} sub={s} now={now} first={i === 0} full={full} />)}
+          </div>
+        )}
+        <AnimatePresence initial={false}>
+          {o.refundedPaise > 0 && (
+            <motion.p key="refund" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={soft} className="overflow-hidden text-[13px]" style={{ color: "#B25E00" }}>
+              <span className="block pt-3">{formatINR(o.refundedPaise)} refunded for items no store could deliver.</span>
+            </motion.p>
+          )}
+          {o.settled && (
+            <motion.p key="settled" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={soft} className="overflow-hidden text-[13px]" style={{ color: C.green }}>
+              <span className="block pt-3">Everything arrived. Stores have been paid out.</span>
+            </motion.p>
+          )}
+        </AnimatePresence>
+        {onOpen && (
+          <button type="button" onClick={onOpen} className="-mx-1 mt-2 flex min-h-11 cursor-pointer items-center gap-1 px-1 text-[14px] font-semibold" style={{ color: LINK }}>
+            {o.settled ? "Receipt and details" : "Order details"} <IChevron size={13} />
+          </button>
+        )}
+      </motion.section>
+
+      {full && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-1 text-[13px]" style={{ color: C.secondary }}>
           <dt>Placed</dt>
-          <dd>{new Date(o.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd>
-          <dt>Stores</dt>
-          <dd>{o.subOrders.length || "—"}</dd>
+          <dd style={{ color: C.label }}>{new Date(o.createdAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</dd>
+          <dt>Payment</dt>
+          <dd style={{ color: C.label }}>{PAYMENT[o.paymentStatus]}</dd>
           <dt>Order ID</dt>
-          <dd className="break-all font-mono">{o.basketId}</dd>
+          <dd className="break-all font-mono text-[12px]" style={{ color: C.label }}>{o.basketId}</dd>
         </dl>
-      </Card>
-
-      {o.refundedPaise > 0 && (
-        <InlineMessage tone="warning" icon="currency_exchange">{formatINR(o.refundedPaise)} refunded for items no store could deliver.</InlineMessage>
       )}
-      {o.paymentStatus === "FAILED" && <InlineMessage tone="error">Payment failed. You were not charged.</InlineMessage>}
+      {full && o.settled && <ReceiptCard order={o} />}
+    </div>
+  );
+}
 
-      {o.subOrders.length === 0 ? (
-        <InlineMessage tone="info" icon="hourglass_top">No stores yet. Waiting for payment.</InlineMessage>
-      ) : (
-        <div className="space-y-4">
-          {o.subOrders.map((s) => <SubOrderCard key={s.id} sub={s} />)}
+function SubRow({ sub, now, first, full }: { sub: SubOrderView; now: number; first: boolean; full: boolean }) {
+  const cur = sub.attempts.at(-1);
+  const name = sub.currentStoreName ?? cur?.storeName ?? sub.approvedStoreName;
+  const failed = sub.attempts.filter((a) => a.status === "REJECTED" || a.status === "EXPIRED");
+  const n = STAGES.indexOf(sub.status as (typeof STAGES)[number]) + 1;
+  const covered = priceProtection(sub)?.coveredPaise ?? 0;
+  const lost = sub.status === "FAILED_NO_FULFILMENT";
+  const [open, setOpen] = useState(false);
+  const statusText = lost
+    ? `No store could take it · refunded ${formatINR(sub.refundPaise ?? sub.approvedAmountPaise)}`
+    : sub.status === "DISPATCHING"
+      ? cur ? `Waiting for ${shortName(cur.storeName)} · try ${sub.attemptCount} of ${sub.maxAttempts}` : "Finding a store"
+      : STAGE_LABEL[sub.status];
+  return (
+    <div className="py-3" style={{ borderTop: first ? undefined : `0.5px solid ${C.sep}`, paddingTop: first ? 0 : undefined }}>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="relative min-w-0 overflow-hidden">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.h3 key={name} initial={{ y: 18, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -18, opacity: 0 }} transition={soft} className="truncate text-[15px] font-semibold" style={{ color: C.label }}>{name}</motion.h3>
+          </AnimatePresence>
         </div>
+        <span className="text-[15px] font-semibold" style={{ color: C.label, fontVariantNumeric: "tabular-nums" }}>{formatINR(sub.approvedAmountPaise)}</span>
+      </div>
+      <div className="relative mt-1.5 flex min-h-[22px] items-center gap-2 text-[13px] font-medium">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.span key={sub.status + (cur?.id ?? "")} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={ease} className="flex items-center gap-1.5"
+            style={{ color: lost ? C.red : sub.status === "DELIVERED" ? C.green : sub.status === "DISPATCHING" ? C.secondary : C.label }}>
+            {sub.status === "DELIVERED" ? <CheckDraw size={15} /> : sub.status === "DISPATCHING" ? <Spinner size={13} /> : null}
+            {statusText}
+          </motion.span>
+        </AnimatePresence>
+        {sub.status === "DISPATCHING" && cur?.status === "OFFERED" && cur.expiresAt && <span className="ml-auto"><Ring from={cur.createdAt} until={cur.expiresAt} now={now} size={22} label={false} /></span>}
+      </div>
+      {!lost && (
+        <div className="mt-2 flex gap-1" role="img" aria-label={`${name}: step ${Math.max(0, n)} of ${STAGES.length}`}>
+          {STAGES.map((s, i) => (
+            <span key={s} className="h-[3px] flex-1 overflow-hidden rounded-full" style={{ background: C.fill }}>
+              <motion.span className="block h-full rounded-full" style={{ background: C.green, originX: 0 }} initial={false} animate={{ scaleX: n > i ? 1 : 0 }} transition={soft} />
+            </span>
+          ))}
+        </div>
+      )}
+      <AnimatePresence initial={false}>
+        {failed.length > 0 && (
+          <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={soft} className="overflow-hidden text-[12px] leading-[1.45]" style={{ color: C.secondary }}>
+            <span className="block pt-2">
+              {failed.map((a) => `${shortName(a.storeName)} ${a.status === "EXPIRED" ? "didn't answer in time" : `declined${a.rejectReason ? ` (${a.rejectReason.toLowerCase()})` : ""}`}`).join(" · ")}
+              {cur && cur.status !== "REJECTED" && cur.status !== "EXPIRED" && ` · moved to ${shortName(cur.storeName)} · your price stays ${formatINR(sub.approvedAmountPaise)}`}
+              {covered > 0 && ` · KiranaAI covers ${formatINR(covered)}`}
+            </span>
+          </motion.p>
+        )}
+      </AnimatePresence>
+      {full && (
+        <>
+          <ul className="mt-2.5 space-y-0.5 text-[13px]" aria-label={`Items from ${name}`} style={{ color: C.secondary }}>
+            {sub.lines.map((l) => (
+              <li key={l.listingId} className="flex justify-between gap-3"><span>{l.qty}× {l.name}</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{formatINR(l.lineTotalPaise)}</span></li>
+            ))}
+          </ul>
+          <HandoffStrip sub={sub} />
+          <button type="button" aria-expanded={open} aria-controls={`steps-${sub.id}`} onClick={() => setOpen((v) => !v)}
+            className="-mx-1 mt-1 flex min-h-11 cursor-pointer items-center gap-1 px-1 text-[13px] font-semibold" style={{ color: LINK }}>
+            {open ? "Hide steps" : "Show all steps"}
+            <motion.span animate={{ rotate: open ? 90 : 0 }} transition={soft} className="inline-flex"><IChevron size={12} /></motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {open && (
+              <motion.ol id={`steps-${sub.id}`} aria-label="Progress" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={soft} className="overflow-hidden">
+                {deriveTimeline(sub).map((s) => (
+                  <li key={s.key} className="flex items-center gap-2.5 py-1 text-[13px]" style={{ color: s.state === "pending" ? C.tertiary : s.state === "failed" ? C.red : C.label, fontWeight: s.state === "active" ? 600 : 400 }}>
+                    <span className="h-[7px] w-[7px] shrink-0 rounded-full" aria-hidden style={{ background: s.state === "done" ? C.green : s.state === "failed" ? C.red : s.state === "active" ? C.orange : "#D1D1D6" }} />
+                    {s.label}
+                    <span className="sr-only"> ({s.state === "pending" ? "not started" : s.state === "active" ? "in progress" : s.state})</span>
+                  </li>
+                ))}
+              </motion.ol>
+            )}
+          </AnimatePresence>
+        </>
       )}
     </div>
   );
