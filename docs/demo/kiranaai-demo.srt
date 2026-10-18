@@ -1,0 +1,356 @@
+1
+00:00:00,279 --> 00:00:01,262
+This is KiranaAI:
+
+2
+00:00:01,262 --> 00:00:04,098
+agentic commerce for neighbourhood kirana stores,
+
+3
+00:00:04,098 --> 00:00:05,487
+built on Beckn and ONDC.
+
+4
+00:00:05,487 --> 00:00:09,076
+A family can ask for the week's groceries in plain Hinglish or
+
+5
+00:00:09,076 --> 00:00:12,606
+English, and an AI agent shops across the small stores around
+
+6
+00:00:12,606 --> 00:00:14,632
+them, instead of one big warehouse.
+
+7
+00:00:15,245 --> 00:00:17,278
+Here is our customer's neighbourhood:
+
+8
+00:00:17,278 --> 00:00:19,915
+five real kirana stores within three kilometres,
+
+9
+00:00:19,915 --> 00:00:22,718
+each with its own prices, stock and delivery rules.
+
+10
+00:00:22,718 --> 00:00:24,146
+Let's start the live demo.
+
+11
+00:00:24,759 --> 00:00:27,302
+The demo cockpit shows both sides of the market.
+
+12
+00:00:27,302 --> 00:00:29,845
+The customer talks to the assistant on the left.
+
+13
+00:00:29,845 --> 00:00:31,275
+The stores live on the map.
+
+14
+00:00:31,878 --> 00:00:33,797
+Our customer types one sentence:
+
+15
+00:00:33,797 --> 00:00:35,777
+weekly groceries for four people,
+
+16
+00:00:35,777 --> 00:00:37,516
+under fifteen hundred rupees:
+
+17
+00:00:37,516 --> 00:00:39,256
+atta, toor dal, milk and tea.
+
+18
+00:00:39,866 --> 00:00:42,934
+Gemini, running on Vertex AI, now works through tools.
+
+19
+00:00:42,934 --> 00:00:45,548
+It searches the stores' catalogues over Beckn,
+
+20
+00:00:45,548 --> 00:00:48,390
+suggests sensible quantities for a family of four,
+
+21
+00:00:48,390 --> 00:00:51,799
+and runs an optimiser that picks the cheapest combination of
+
+22
+00:00:51,799 --> 00:00:54,584
+stores, then fewer stores, then shorter distance.
+
+23
+00:00:55,189 --> 00:00:55,815
+The result:
+
+24
+00:00:55,815 --> 00:00:58,379
+one basket split across three stores, Sharma,
+
+25
+00:00:58,379 --> 00:01:01,057
+Gupta and Lakshmi, with a reason on every line.
+
+26
+00:01:01,057 --> 00:01:04,190
+Quantities the agent guessed are marked as suggestions,
+
+27
+00:01:04,190 --> 00:01:07,438
+and the customer confirms them before anything is priced.
+
+28
+00:01:08,049 --> 00:01:11,302
+Next, the platform asks each store for a verified quote.
+
+29
+00:01:11,302 --> 00:01:14,846
+The total always comes from the stores, never from the model.
+
+30
+00:01:15,446 --> 00:01:17,200
+And here is the key guardrail:
+
+31
+00:01:17,200 --> 00:01:20,241
+the agent can plan, but it can never pay or confirm.
+
+32
+00:01:20,241 --> 00:01:23,868
+Only this button, pressed by the customer, approves the order.
+
+33
+00:01:23,868 --> 00:01:24,336
+One tap:
+
+34
+00:01:24,336 --> 00:01:26,675
+approve and pay fourteen hundred rupees.
+
+35
+00:01:27,276 --> 00:01:30,714
+Payment is held, and the order splits into three store orders.
+
+36
+00:01:30,714 --> 00:01:32,045
+Switching to the stores:
+
+37
+00:01:32,045 --> 00:01:35,207
+all three shopkeepers get a ringing offer with the items,
+
+38
+00:01:35,207 --> 00:01:36,815
+their payout and a countdown.
+
+39
+00:01:37,416 --> 00:01:39,569
+Sharma General accepts straight away.
+
+40
+00:01:40,178 --> 00:01:43,820
+Lakshmi Stores is out of stock, so they decline with a reason.
+
+41
+00:01:43,820 --> 00:01:47,286
+Within about a second, KiranaAI re-dispatches that order to
+
+42
+00:01:47,286 --> 00:01:49,754
+the next best store, Annapurna Provisions.
+
+43
+00:01:50,355 --> 00:01:51,348
+Annapurna accepts.
+
+44
+00:01:51,348 --> 00:01:53,776
+The customer's price is locked at the quote:
+
+45
+00:01:53,776 --> 00:01:55,652
+if a replacement store costs more,
+
+46
+00:01:55,652 --> 00:01:57,584
+the platform covers the difference.
+
+47
+00:01:58,193 --> 00:02:00,250
+Gupta Kirana simply doesn't answer.
+
+48
+00:02:00,250 --> 00:02:02,601
+Shopkeepers are busy, and that's normal.
+
+49
+00:02:02,601 --> 00:02:04,423
+When the offer window runs out,
+
+50
+00:02:04,423 --> 00:02:07,891
+the order moves on automatically, with no one on the phone.
+
+51
+00:02:07,891 --> 00:02:11,418
+Every step is a real Beckn message between our buyer app and
+
+52
+00:02:11,418 --> 00:02:12,065
+seller app:
+
+53
+00:02:12,065 --> 00:02:15,592
+search, select, init, confirm, and cancel with reassignment.
+
+54
+00:02:16,201 --> 00:02:19,162
+Balaji Mart picks up Gupta's items and accepts.
+
+55
+00:02:19,162 --> 00:02:21,934
+Again, the customer pays the original price,
+
+56
+00:02:21,934 --> 00:02:24,643
+and KiranaAI covers the extra forty rupees.
+
+57
+00:02:25,248 --> 00:02:27,750
+Now the stores pack and send out their orders.
+
+58
+00:02:27,750 --> 00:02:30,688
+Each store moves its own order through packing, ready,
+
+59
+00:02:30,688 --> 00:02:32,374
+out for delivery and delivered,
+
+60
+00:02:32,374 --> 00:02:34,441
+and the customer sees every step live.
+
+61
+00:02:43,933 --> 00:02:45,675
+Every store order has arrived.
+
+62
+00:02:45,675 --> 00:02:48,986
+Only now is the held payment settled and paid out to each
+
+63
+00:02:48,986 --> 00:02:49,509
+merchant.
+
+64
+00:02:50,109 --> 00:02:52,389
+One more request, this time in Hinglish:
+
+65
+00:02:52,389 --> 00:02:54,498
+two hundred and fifty grams of jeera.
+
+66
+00:02:54,498 --> 00:02:57,291
+The stores only sell jeera in hundred gram packs,
+
+67
+00:02:57,291 --> 00:03:00,711
+and the agent can only order whole packs from real listings.
+
+68
+00:03:00,711 --> 00:03:02,649
+So instead of inventing a product,
+
+69
+00:03:02,649 --> 00:03:05,955
+it explains that and offers the pack that actually exists.
+
+70
+00:03:06,562 --> 00:03:09,091
+The admin ledger shows exactly who earned what:
+
+71
+00:03:09,091 --> 00:03:10,545
+each merchant's net payout,
+
+72
+00:03:10,545 --> 00:03:13,613
+and the forty rupee subsidy the platform paid to keep its
+
+73
+00:03:13,613 --> 00:03:14,366
+price promise.
+
+74
+00:03:14,972 --> 00:03:18,225
+And the audit log keeps every Beckn message and state change
+
+75
+00:03:18,225 --> 00:03:21,587
+for each transaction, so every decision the system made can be
+
+76
+00:03:21,587 --> 00:03:21,966
+traced.
+
+77
+00:03:22,567 --> 00:03:26,055
+Under the hood, one Cloud Run service hosts the buyer app,
+
+78
+00:03:26,055 --> 00:03:27,859
+the seller apps and the agent,
+
+79
+00:03:27,859 --> 00:03:31,227
+and they talk to each other in Beckn messages over HTTP.
+
+80
+00:03:31,227 --> 00:03:33,753
+Orders live in Postgres on Compute Engine.
+
+81
+00:03:33,753 --> 00:03:36,038
+Gemini on Vertex AI plans the baskets,
+
+82
+00:03:36,038 --> 00:03:39,466
+and the Gemini Live API lets customers simply speak their
+
+83
+00:03:39,466 --> 00:03:39,767
+list.
+
+84
+00:03:40,381 --> 00:03:40,907
+KiranaAI:
+
+85
+00:03:40,907 --> 00:03:44,359
+one sentence from the customer, three neighbourhood stores,
+
+86
+00:03:44,359 --> 00:03:46,699
+automatic recovery when a store says no,
+
+87
+00:03:46,699 --> 00:03:49,214
+and a human always in control of the money.
+
+88
+00:03:49,214 --> 00:03:51,203
+Built on Google Cloud with Gemini.
+
+89
+00:03:51,203 --> 00:03:51,788
+Thank you.
+
